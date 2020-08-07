@@ -47,7 +47,7 @@ go_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/HSPC Su
     gc()
     
     ### rownames in the meta.data should be in the same order as colnames in the counts
-    Seurat_Obj@meta.data <- Seurat_Obj@meta.data[colnames(Seurat_Obj@assays$RNA@counts),]  
+    Seurat_Obj@meta.data <- Seurat_Obj@meta.data[colnames(Seurat_Obj@assays$RNA@counts),]
     
     ### Find markers for each cluster?
     ### Or FindAllMarkers()?
