@@ -19,7 +19,7 @@
 ###
 
 go_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/HSPC Subsets/",
-                              outputDir="./results/") {
+                              outputDir="./results/GO_Enrichment/") {
   
   ### load libraries
   if(!require(Seurat, quietly = TRUE)) {
@@ -30,6 +30,12 @@ go_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/HSPC Su
   if(!require(xlsx, quietly = TRUE)) {
     install.packages("xlsx")
     require(xlsx, quietly = TRUE)
+  }
+  if(!require(org.Mm.eg.db, quietly = TRUE)) {
+    if (!requireNamespace("BiocManager", quietly = TRUE))
+      install.packages("BiocManager")
+    BiocManager::install("org.Mm.eg.db")
+    require(org.Mm.eg.db, quietly = TRUE)
   }
   
   # ******************************************************************************************
@@ -190,25 +196,48 @@ go_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/HSPC Su
     
     # DimPlot(Seurat_Obj, reduction = "umap", group.by = "seurat_clusters", pt.size = 2)
     
-    writeLines(paste(f, "-Unique Cluster #-", length(unique(Seurat_Obj@meta.data$seurat_clusters))))
+    writeLines(paste(f, "-Unique Cluster #-", length(levels(Seurat_Obj@meta.data$seurat_clusters))))
     
     ### Ident configure
     Idents(object = Seurat_Obj) <- Seurat_Obj@meta.data$seurat_clusters
     
-    ### DE analysis with Wilcoxon test
+    ### DE analysis with DESeq2
     all_de_result <- FindAllMarkers(object = Seurat_Obj, test.use = "DESeq2",
                                     logfc.threshold = 0, min.pct = 0.1)
     
-    ### GO Enrichment for each cluster pair
-    
-    ### the list of the cluster pair
-    
-    
-    
+    ### GO Enrichment for each cluster
+    for(cluster in levels(Seurat_Obj@meta.data$seurat_clusters)) {
+      
+      ### new output dir
+      outputDir2 <- paste0(outputDir, f, "/", cluster, "/")
+      dir.create(outputDir2, recursive = TRUE, showWarnings = FALSE)
+      
+      ### extract certain DE result
+      de_result <- all_de_result[which(all_de_result$cluster == cluster),]
+      
+      ### change the column order
+      de_result <- data.frame(gene=de_result$gene,
+                              cluster=de_result$cluster,
+                              de_result[,-c(6,7)],
+                              stringsAsFactors = FALSE, check.names = FALSE)
+      
+      ### write out the result
+      write.xlsx2(de_result, file = paste0(outputDir2, f, "_GO_enrichment_result_", cluster, ".xlsx"),
+                  row.names = FALSE, sheetName = "DE_Result", append = FALSE)
+      
+      ### GO Enrichment analysis with the DE genes
+      go_result <- pathwayAnalysis_CP(geneList = mapIds(org.Mm.eg.db, de_result$gene, "ENTREZID", "SYMBOL"),
+                                      org = "mouse", database = "GO",
+                                      title = paste0(f, "_results_", cluster),
+                                      displayNum = 50, imgPrint = TRUE,
+                                      dir = paste0(outputDir2))
+      
+      ### write out the GO result
+      write.xlsx2(go_result, file = paste0(outputDir2, f, "_GO_enrichment_result_", cluster, ".xlsx"),
+                  row.names = FALSE, sheetName = "GO_Result", append = TRUE)
+      
+    }
     
   }
-  
-  
-  
   
 }
