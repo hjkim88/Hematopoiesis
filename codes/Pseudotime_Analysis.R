@@ -9,16 +9,16 @@
 #   
 #   Instruction
 #               1. Source("Pseudotime_Analysis.R")
-#               2. Run the function "go_analysis_trent" - specify the input directory and the output directory
+#               2. Run the function "pseudotime_analysis_trent" - specify the input directory and the output directory
 #               3. The results will be generated under the output directory
 #
 #   Example
 #               > source("The_directory_of_Pseudotime_Analysis.R/Pseudotime_Analysis.R")
-#               > go_analysis_trent(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/HSPC Subsets/",
-#                                   outputDir="./results/")
+#               > pseudotime_analysis_trent(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/HSPC Subsets/",
+#                                           outputDir="./results/")
 ###
 
-go_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/HSPC Subsets/",
+pseudotime_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/HSPC Subsets/",
                               outputDir="./results/Pseudotime/") {
   
   ### load libraries
@@ -35,6 +35,10 @@ go_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/HSPC Su
   if(!require(scales, quietly = TRUE)) {
     install.packages("scales")
     library(scales, quietly = TRUE)
+  }
+  if(!require(ggplot2, quietly = TRUE)) {
+    install.packages("ggplot2")
+    require(ggplot2, quietly = TRUE)
   }
   
   ### get Robj file list
@@ -251,6 +255,10 @@ go_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/HSPC Su
     ### rownames in the meta.data should be in the same order as colnames in the counts
     Seurat_Obj@meta.data <- Seurat_Obj@meta.data[colnames(Seurat_Obj@assays$RNA@counts),]
     
+    ### set output directory
+    outputDir2 <- paste0(outputDir, f, "/")
+    dir.create(outputDir2, recursive = TRUE, showWarnings = FALSE)
+    
     ### annotate the file name to the R object
     Seurat_Obj@meta.data$Tissue <- strsplit(f, split = "_", fixed = TRUE)[[1]][1]
     
@@ -262,29 +270,66 @@ go_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/HSPC Su
                                    project = Seurat_Obj@project.name)
     }
     
-    ### run pseudotime analysis with the current R object
-    
-    ### get PCA matrix
-    pca_map <- Embeddings(Seurat_Obj, reduction = "pca")[rownames(Seurat_Obj@meta.data),1:2]
-    
-    ### get slingshot object
-    slingshot_obj <- slingshot(pca_map, clusterLabels = Seurat_Obj@meta.data$seurat_clusters, reducedDim = "PCA")
-    
-    ### get colors for the clustering result
-    cell_colors_clust <- cell_pal(levels(Seurat_Obj@meta.data$seurat_clusters), hue_pal())
-    
-    ### Trajectory inference
-    plot(pca_map,
-         main="Trajectory Inference Based On Seurat Clusters (PCA)",
-         col = cell_colors_clust[as.character(Seurat_Obj@meta.data$seurat_clusters)],
-         pch = 19, cex = 1)
-    lines(slingshot_obj, lwd = 2, type = "lineages", col = "black",
-          show.constraints = TRUE, constraints.col = cell_colors_clust)
-    legend("bottomleft", legend = names(cell_colors_clust), col = cell_colors_clust,
-           pch = 19)
-    
+    ### run only if there are enough number of cells in the R object
+    if(nrow(Seurat_Obj@meta.data) > 1) {
+      
+      ### run pseudotime analysis with the current R object
+      
+      ### get PCA matrix
+      pca_map <- Embeddings(Seurat_Obj, reduction = "pca")[rownames(Seurat_Obj@meta.data),1:2]
+      
+      ### get slingshot object
+      slingshot_obj <- slingshot(pca_map, clusterLabels = Seurat_Obj@meta.data$seurat_clusters, reducedDim = "PCA")
+      
+      ### get colors for the clustering result
+      cell_colors_clust <- cell_pal(levels(Seurat_Obj@meta.data$seurat_clusters), hue_pal())
+      
+      ### Trajectory inference
+      png(paste0(outputDir2, "Trajectory_Inference_", f, "_PCA.png"), width = 2500, height = 1500, res = 200)
+      plot(pca_map,
+           main="Trajectory Inference Based On Seurat Clusters (PCA)",
+           col = cell_colors_clust[as.character(Seurat_Obj@meta.data$seurat_clusters)],
+           pch = 19, cex = 1)
+      lines(slingshot_obj, lwd = 2, type = "lineages", col = "black",
+            show.constraints = TRUE, constraints.col = cell_colors_clust)
+      legend("bottomleft", legend = names(cell_colors_clust), col = cell_colors_clust,
+             pch = 19)
+      dev.off()
+      
+    }
     
   }
+  
+  ### save the combined R object
+  dataDir <- "./data/"
+  save(list = c("Combined_Seurat_Obj"), file = paste0(dataDir, "Combined_Seurat_Obj.RDATA"))
+  
+  #
+  ### pseudotime analysis on the combined data
+  #
+  
+  ### run PCA
+  Combined_Seurat_Obj <- FindVariableFeatures(Combined_Seurat_Obj)
+  Combined_Seurat_Obj <- ScaleData(Combined_Seurat_Obj)
+  Combined_Seurat_Obj <- RunPCA(Combined_Seurat_Obj, npcs = 10)
+  
+  ### draw a PCA
+  DimPlot(Combined_Seurat_Obj, reduction = "pca", group.by = "Tissue", pt.size = 1.5) +
+    labs(title = paste0("PCA_Combined_Tissue"))
+  
+  
+  ### separate the combined into different cell groups
+  
+  
+  
+  
+  ### get PCA matrix
+  pca_map <- Embeddings(Combined_Seurat_Obj, reduction = "pca")[rownames(Combined_Seurat_Obj@meta.data),1:2]
+  
+  ### get slingshot object
+  slingshot_obj <- slingshot(pca_map, clusterLabels = Combined_Seurat_Obj@meta.data$All_seurat_clusts, reducedDim = "PCA")
+  
+  
   
   
   
