@@ -37,6 +37,10 @@ go_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/HSPC Su
     BiocManager::install("org.Mm.eg.db")
     require(org.Mm.eg.db, quietly = TRUE)
   }
+  if(!require(ggplot2, quietly = TRUE)) {
+    install.packages("ggplot2")
+    require(ggplot2, quietly = TRUE)
+  }
   
   # ******************************************************************************************
   # Pathway Analysis with clusterProfiler package
