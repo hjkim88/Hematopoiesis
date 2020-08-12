@@ -19,7 +19,7 @@
 ###
 
 pseudotime_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/HSPC Subsets/",
-                              outputDir="./results/Pseudotime/") {
+                                      outputDir="./results/Pseudotime/") {
   
   ### load libraries
   if(!require(Seurat, quietly = TRUE)) {
@@ -40,9 +40,22 @@ pseudotime_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses
     install.packages("ggplot2")
     require(ggplot2, quietly = TRUE)
   }
+  if(!require(rgl, quietly = TRUE)) {
+    install.packages("rgl")
+    require(rgl, quietly = TRUE)
+  }
+  
   
   ### get Robj file list
   f_list <- list.files(Robj_path, pattern = ".Robj$")
+  
+  ### determine necessary variables
+  time_points <- c("E16", "E18", "P0", "ADULT")
+  HSPC_populations <- c("LTHSC", "STHSC", "MPP2", "MPP3", "MPP4")
+  possible_names <- as.vector(sapply(time_points, function(x) paste0(x, HSPC_populations)))
+  
+  ### keep the required files only
+  f_list <- f_list[which(f_list %in% paste0(possible_names, "_regress.Robj"))]
   
   ### a function for color brewer
   cell_pal <- function(cell_vars, pal_fun) {
@@ -276,7 +289,7 @@ pseudotime_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses
       ### run pseudotime analysis with the current R object
       
       ### get PCA matrix
-      pca_map <- Embeddings(Seurat_Obj, reduction = "pca")[rownames(Seurat_Obj@meta.data),1:2]
+      pca_map <- Embeddings(Seurat_Obj, reduction = "pca")[rownames(Seurat_Obj@meta.data),1:5]
       
       ### get slingshot object
       slingshot_obj <- slingshot(pca_map, clusterLabels = Seurat_Obj@meta.data$seurat_clusters, reducedDim = "PCA")
@@ -295,6 +308,11 @@ pseudotime_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses
       legend("bottomleft", legend = names(cell_colors_clust), col = cell_colors_clust,
              pch = 19)
       dev.off()
+      
+      ### 3D Slingshot
+      plot3d.SlingshotDataSet(slingshot_obj, dims = 1:3, col = cell_colors_clust)
+      
+      plotGenePseudotime(slingshot_obj, "Xkr4", as.matrix(Seurat_Obj@assays$RNA@counts))
       
     }
     
@@ -317,9 +335,11 @@ pseudotime_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses
   DimPlot(Combined_Seurat_Obj, reduction = "pca", group.by = "Tissue", pt.size = 1.5) +
     labs(title = paste0("PCA_Combined_Tissue"))
   
-  
+  #
   ### separate the combined into different cell groups
+  #
   
+  time_points <- c("E16", "E18", "P0", "ADULT")
   
   
   
