@@ -438,7 +438,9 @@ pseudotime_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses
   
   ### the plot3d.SlingshotDataSet of the slingshot package is incomplete and too simple,
   ### so, i'm implementing a 3d plot function myself
-  slingshot_3d_lineages <- function(slingshot_obj, color, title, print=FALSE, outputDir=NULL) {
+  slingshot_3d_lineages <- function(slingshot_obj, color, title,
+                                    print=FALSE, outputDir=NULL,
+                                    width=1200, height=800) {
     
     ### load libraries
     if(!require(Seurat, quietly = TRUE)) {
@@ -455,13 +457,18 @@ pseudotime_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses
       install.packages("rgl")
       require(rgl, quietly = TRUE)
     }
+    if(!require(rmarkdown, quietly = TRUE)) {
+      install.packages("rmarkdown")
+      require(rmarkdown, quietly = TRUE)
+    }
     
     #
     ### 3D Slingshot
     #
     
     ### draw 3D PCA
-    plot3d.SlingshotDataSet(slingshot_obj, dims = 1:3, col = "black", col2 = cell_colors_clust, type = "lineages", add = TRUE)
+    par3d(windowRect = c(50, 50, width+50, height+50))
+    plot3d.SlingshotDataSet(slingshot_obj, dims = 1:3, col = "black", col2 = color, type = "lineages", add = TRUE)
     plot3d(slingshot_obj@reducedDim, col = apply(slingshot_obj@clusterLabels, 1, function(x) color[names(x)[which(x == 1)]]),
            size = 8, aspect = FALSE, add = TRUE)
     axes3d(edges=c("x+-", "y+-", "z++"), lwd = 2,
@@ -471,10 +478,15 @@ pseudotime_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses
     mtext3d(text = expression(bold("PC3")), edge="z++", line = -2, at = max(slingshot_obj@reducedDim[,3]), pos = NA)
     decorate3d(xlim = NULL, ylim = NULL, zlim = NULL, 
                xlab = "", ylab = "", zlab = "", 
-               box = FALSE, axes = FALSE, main = expression(bold("abc")), sub = NULL,
+               box = FALSE, axes = FALSE, main = expression(bold(title)), sub = NULL,
                top = TRUE, aspect = FALSE, expand = 1.05)
-    legend3d("topright", legend = names(cell_colors_clust), title = "Clusters",
-             col = cell_colors_clust, pch = 19, cex=1)
+    legend3d("topright", legend = names(color), title = "Clusters",
+             col = color, pch = 19, cex=2)
+    if(print) {
+      writeWebGL(dir=outputDir, filename = paste0(title, ".html"),
+                 width=width, height = height)
+    }
+    
   }
   
   ### for each of the Robj file, run the pseudotime analysis and combine the R objects for later use
@@ -497,7 +509,8 @@ pseudotime_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses
     dir.create(outputDir2, recursive = TRUE, showWarnings = FALSE)
     
     ### annotate the file name to the R object
-    Seurat_Obj@meta.data$Tissue <- strsplit(f, split = "_", fixed = TRUE)[[1]][1]
+    tissue_name <- strsplit(f, split = "_", fixed = TRUE)[[1]][1]
+    Seurat_Obj@meta.data$Tissue <- tissue_name
     
     ### combine the Seurat R objects
     if(is.null(Combined_Seurat_Obj)) {
@@ -522,7 +535,7 @@ pseudotime_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses
       cell_colors_clust <- cell_pal(levels(Seurat_Obj@meta.data$seurat_clusters), hue_pal())
       
       ### Trajectory inference
-      png(paste0(outputDir2, "Trajectory_Inference_", f, "_PCA.png"), width = 2500, height = 1500, res = 200)
+      png(paste0(outputDir2, "Trajectory_Inference_", tissue_name, "_PCA.png"), width = 2500, height = 1500, res = 200)
       plot(pca_map,
            main="Trajectory Inference Based On Seurat Clusters (PCA)",
            col = cell_colors_clust[as.character(Seurat_Obj@meta.data$seurat_clusters)],
@@ -534,9 +547,18 @@ pseudotime_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses
       dev.off()
       
       ### 3D Slingshot
-      plot3d.SlingshotDataSet(slingshot_obj, dims = 1:3, col = c("red", "blue", "green"), type = "both")
+      slingshot_3d_lineages(slingshot_obj = slingshot_obj,
+                            color = cell_colors_clust,
+                            title = paste0("Trajectory_Inference_3D_PCA_", tissue_name),
+                            print = TRUE,
+                            outputDir = outputDir2,
+                            width = 1200,
+                            height = 800)
       
+      ###
       plotGenePseudotime(slingshot_obj, "Xkr4", as.matrix(Seurat_Obj@assays$RNA@counts))
+      
+      ### multi dimensional plot - pseudotime
       
     }
     
