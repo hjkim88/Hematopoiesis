@@ -774,7 +774,7 @@ pseudotime_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses
         }
       }
       rgl::points3d(centers[clusters %in% clus2include, dims],
-                    size = size/2, col = col2)
+                    size = size/2, col = col2[clusters[clusters %in% clus2include]])
       rgl::points3d(centers[clusters %in% clus2include, dims],
                     size = size, col = col[1])
     }
