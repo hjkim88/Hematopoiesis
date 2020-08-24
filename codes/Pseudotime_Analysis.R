@@ -53,6 +53,11 @@ pseudotime_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses
   time_points <- c("E16", "E18", "P0", "ADULT")
   HSPC_populations <- c("LTHSC", "STHSC", "MPP2", "MPP3", "MPP4")
   possible_names <- as.vector(sapply(time_points, function(x) paste0(x, HSPC_populations)))
+  possible_names_mat <- data.frame(Names=possible_names,
+                                   Time=as.vector(sapply(time_points, function(x) rep(x, length(HSPC_populations)))),
+                                   HSPC=rep(HSPC_populations, length(time_points)),
+                                   stringsAsFactors = FALSE, check.names = FALSE)
+  row.names(possible_names_mat) <- possible_names
   
   ### keep the required files only
   f_list <- f_list[which(f_list %in% paste0(possible_names, "_regress.Robj"))]
@@ -863,6 +868,12 @@ pseudotime_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses
     tissue_name <- strsplit(f, split = "_", fixed = TRUE)[[1]][1]
     Seurat_Obj@meta.data$Tissue <- tissue_name
     
+    ### annotate the development
+    Seurat_Obj@meta.data$Development <- possible_names_mat[tissue_name, "Time"]
+    
+    ### annotate the HSPC type
+    Seurat_Obj@meta.data$HSPC <- possible_names_mat[tissue_name, "HSPC"]
+    
     ### combine the Seurat R objects
     if(is.null(Combined_Seurat_Obj)) {
       Combined_Seurat_Obj <- Seurat_Obj
@@ -941,23 +952,82 @@ pseudotime_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses
   DimPlot(Combined_Seurat_Obj, reduction = "pca", group.by = "Tissue", pt.size = 1.5) +
     labs(title = paste0("PCA_Combined_Tissue"))
   
+  ### check whether the orders are the same
+  print(identical(names(Idents(object = Combined_Seurat_Obj)), rownames(Combined_Seurat_Obj@meta.data)))
+  
   #
   ### separate the combined into different cell groups
   #
   
-  time_points <- c("E16", "E18", "P0", "ADULT")
+  ### set the ident of the object with the HSPC type
+  Combined_Seurat_Obj <- SetIdent(object = Combined_Seurat_Obj,
+                                  cells = rownames(Combined_Seurat_Obj@meta.data),
+                                  value = Combined_Seurat_Obj@meta.data$HSPC)
   
+  ### check whether the orders are the same
+  print(identical(names(Idents(object = Combined_Seurat_Obj)), rownames(Combined_Seurat_Obj@meta.data)))
   
-  
-  ### get PCA matrix
-  pca_map <- Embeddings(Combined_Seurat_Obj, reduction = "pca")[rownames(Combined_Seurat_Obj@meta.data),1:2]
-  
-  ### get slingshot object
-  slingshot_obj <- slingshot(pca_map, clusterLabels = Combined_Seurat_Obj@meta.data$All_seurat_clusts, reducedDim = "PCA")
-  
-  
-  
-  
-  
+  ### for each cell population
+  for(type in HSPC_populations) {
+    
+    ### new output directory
+    outputDir2 <- paste0(outputDir, type, "/")
+    dir.create(outputDir2, showWarnings = FALSE, recursive = TRUE)
+    
+    ### split the Seurat obj based on HSPC info
+    Seurat_Obj <- subset(Combined_Seurat_Obj, idents=type)
+    
+    ### order the meta data by developmental time
+    Seurat_Obj@meta.data <- Seurat_Obj@meta.data[order(factor(Seurat_Obj@meta.data$Development,
+                                                              levels = time_points)),]
+    
+    ### rownames in the meta.data should be in the same order as colnames in the counts
+    Seurat_Obj@assays$RNA@counts <- Seurat_Obj@assays$RNA@counts[,rownames(Seurat_Obj@meta.data)]
+    
+    ### run PCA
+    Seurat_Obj <- RunPCA(Seurat_Obj, npcs = 10)
+    pca_map <- Embeddings(Seurat_Obj, reduction = "pca")[rownames(Seurat_Obj@meta.data),1:10]
+    
+    ### get slingshot object
+    slingshot_obj <- slingshot(pca_map,
+                               clusterLabels = Seurat_Obj@meta.data$Development, 
+                               reducedDim = "PCA")
+    
+    ### get colors for the clustering result
+    cell_colors_clust <- cell_pal(time_points, hue_pal())
+    
+    ### Trajectory inference
+    png(paste0(outputDir2, type, "_Trajectory_Inference_Development_PCA.png"), width = 2500, height = 1500, res = 200)
+    plot(reducedDim(slingshot_obj),
+         main=paste(type, "Trajectory Inference Based On Development (PCA)"),
+         col = cell_colors_clust[Seurat_Obj@meta.data$Development],
+         pch = 19, cex = 1)
+    lines(slingshot_obj, lwd = 2, type = "lineages", col = "black",
+          show.constraints = TRUE, constraints.col = cell_colors_clust)
+    legend("bottomleft", legend = names(cell_colors_clust), col = cell_colors_clust,
+           pch = 19)
+    dev.off()
+    
+    ### Trajectory inference on multi dimentional PCA
+    png(paste0(outputDir2, type, "_Trajectory_Inference_Development_Multi-PCA.png"), width = 2500, height = 1500, res = 200)
+    pairs(slingshot_obj, type="lineages", col = apply(slingshot_obj@clusterLabels, 1, function(x) cell_colors_clust[names(x)[which(x == 1)]]),
+          show.constraints = TRUE, constraints.col = cell_colors_clust, cex = 0.8,
+          horInd = 1:5, verInd = 1:5, main = paste0(type, "_Trajectory_Inference_Development"))
+    par(xpd = TRUE)
+    legend("bottomleft", legend = names(cell_colors_clust), col = cell_colors_clust,
+           pch = 19, title = "Time")
+    dev.off()
+    
+    ### 3D Slingshot
+    slingshot_3d_lineages(slingshot_obj = slingshot_obj,
+                          color = cell_colors_clust,
+                          title = paste0(type, "_Trajectory_Inference_3D_PCA_Development"),
+                          print = TRUE,
+                          outputDir = outputDir2,
+                          width = 1200,
+                          height = 800)
+    rgl.close()
+    
+  }
   
 }
