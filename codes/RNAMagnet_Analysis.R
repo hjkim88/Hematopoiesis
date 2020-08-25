@@ -51,6 +51,21 @@ rna_magnet_trent <- function(Seurat_RObj_path="./data/Combined_BM_Seurat_Obj.RDA
     install.packages("Seurat")
     require(Seurat, quietly = TRUE)
   }
+  if(!require(reticulate, quietly = TRUE)) {
+    install.packages("reticulate")
+    require(reticulate, quietly = TRUE)
+  }
+  if(!require(Rmagic, quietly = TRUE)) {
+    install.packages("Rmagic")
+    require(Rmagic, quietly = TRUE)
+  }
+  
+  ### see python environment since RNAMagnet uses the python module 'magic'
+  # conda_create("r-reticulate")
+  # conda_install("r-reticulate", "python-magic")
+  use_condaenv("r-reticulate")
+  py_config()
+  py_module_available("magic")
   
   ### load the Seurat object and save the object name
   tmp_env <- new.env()
@@ -60,16 +75,84 @@ rna_magnet_trent <- function(Seurat_RObj_path="./data/Combined_BM_Seurat_Obj.RDA
   rm(tmp_env)
   gc()
   
+  ### determine necessary variables
+  time_points <- c("E16", "E18", "P0", "ADULT")
+  cell_type <- c("Heme", "Stroma")
+  
+  ### active assay = "RNA"
+  Seurat_Obj@active.assay <- "RNA"
+  
+  ### preprocessing for PCA and UMAP
+  Seurat_Obj <- FindVariableFeatures(Seurat_Obj)
+  Seurat_Obj <- ScaleData(Seurat_Obj)
+  
+  ### run PCA
+  Seurat_Obj <- RunPCA(Seurat_Obj, npcs = 15)
+  
+  ### run UMAP
+  Seurat_Obj <- RunUMAP(Seurat_Obj, dims = 1:5)
+  
+  ### order the data by time
+  Seurat_Obj@meta.data <- Seurat_Obj@meta.data[order(factor(Seurat_Obj@meta.data$Development,
+                                                            levels = time_points)),]
+  
   ### rownames in the meta.data should be in the same order as colnames in the counts
   Seurat_Obj@meta.data <- Seurat_Obj@meta.data[colnames(Seurat_Obj@assays$RNA@counts),]
+  
+  ### set the ident of the object with the HSPC type
+  Seurat_Obj <- SetIdent(object = Seurat_Obj,
+                         cells = rownames(Seurat_Obj@meta.data),
+                         value = Seurat_Obj@meta.data$Tissue)
   
   ### check whether the orders are the same
   print(identical(names(Idents(object = Seurat_Obj)), rownames(Seurat_Obj@meta.data)))
   
+  ### for each R object, perform RNAMagnet
+  for(obj in unique(Seurat_Obj@meta.data$Tissue)) {
+    
+    ### new output directory
+    outputDir2 <- paste0(outputDir, obj, "/")
+    dir.create(outputDir2, showWarnings = FALSE, recursive = TRUE)
+    
+    ### split the Seurat obj based on obj info
+    subset_Seurat_Obj <- subset(Seurat_Obj, idents=obj)
+    
+    ### check whether the orders are the same
+    print(identical(names(Idents(object = subset_Seurat_Obj)), rownames(subset_Seurat_Obj@meta.data)))
+    
+    ### rownames in the meta.data should be in the same order as colnames in the counts
+    subset_Seurat_Obj@meta.data <- subset_Seurat_Obj@meta.data[colnames(subset_Seurat_Obj@assays$RNA@counts),]
+    
+    ### There should be at least two clusters for RNAMagnet
+    if(length(unique(subset_Seurat_Obj@meta.data$seurat_clusters)) > 1) {
+      ### for each cluster, set the cluster as the anchor and run RNAMagnet
+      for(clust in unique(subset_Seurat_Obj@meta.data$seurat_clusters)) {
+        
+        ### set the ident of the seurat object with the cluster info
+        subset_Seurat_Obj <- SetIdent(object = subset_Seurat_Obj,
+                                      cells = rownames(subset_Seurat_Obj@meta.data),
+                                      value = subset_Seurat_Obj@meta.data$seurat_clusters)
+        
+        ### run RNAMagnet
+        result <- RNAMagnetAnchors(subset_Seurat_Obj,
+                                   anchors = unique(subset_Seurat_Obj@meta.data$seurat_clusters))
+        
+        ### RNAMagnet on PCA
+        qplot(x =Embeddings(subset_Seurat_Obj,reduction="pca")[,1],
+              y=Embeddings(subset_Seurat_Obj,reduction="pca")[,2],
+              color = direction,
+              size=I(0.75),
+              alpha= adhesiveness,data=result) +
+          scale_color_brewer(name = "RNAMagnet\nLocation",palette= "Set1") +
+          scale_alpha_continuous(name = "RNAMagnet\nAdhesiveness") +
+          theme_bw() +
+          theme(panel.grid = element_blank(),
+                axis.text = element_blank(),
+                axis.title = element_blank())
+        
+      }
+    }
+    
+  }
   
-  
-  
-  
-
-
 }
