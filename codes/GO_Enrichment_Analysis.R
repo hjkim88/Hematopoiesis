@@ -195,69 +195,87 @@ go_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/HSPC Su
     ### rownames in the meta.data should be in the same order as colnames in the counts
     Seurat_Obj@meta.data <- Seurat_Obj@meta.data[colnames(Seurat_Obj@assays$RNA@counts),]
     
-    ### Find markers for each cluster?
-    ### Or FindAllMarkers()?
+    ### active assay = "RNA"
+    Seurat_Obj@active.assay <- "RNA"
     
-    ### print out the UMAP of the R object
+    ### set output directory
     outputDir2 <- paste0(outputDir, f, "/")
     dir.create(outputDir2, recursive = TRUE, showWarnings = FALSE)
-    if(nrow(Seurat_Obj@meta.data) > 1) {
-      DimPlot(Seurat_Obj, reduction = "umap", group.by = "seurat_clusters", pt.size = 2) +
+    
+    ### run only if there are enough number of cells in the R object
+    if(nrow(Seurat_Obj@meta.data) > 1 && identical(names(Idents(object = Seurat_Obj)), rownames(Seurat_Obj@meta.data))) {
+      
+      ### clustering on the R object
+      Seurat_Obj <- FindNeighbors(Seurat_Obj, dims = 1:5, k.param = 5)
+      Seurat_Obj <- FindClusters(Seurat_Obj, resolution = 0.4)
+      Seurat_Obj@meta.data$new_clusts <- Idents(Seurat_Obj)
+      
+      ### run UMAP
+      Seurat_Obj <- RunUMAP(Seurat_Obj, dims = 1:5, n.neighbors = ifelse(nrow(Seurat_Obj@meta.data) > 30, 30, nrow(Seurat_Obj@meta.data)))
+      
+      ### print out the UMAP of the R object
+      DimPlot(Seurat_Obj, reduction = "umap", group.by = "new_clusts", pt.size = 2) +
         labs(title = paste0("UMAP_", f, "_Clusters"))
       ggsave(file = paste0(outputDir2, "UMAP_", f, "_Clusters.png"), width = 12, height = 8, dpi = 300)
-    }
-    
-    ### existing clusters
-    cluster_list <- intersect(levels(Seurat_Obj@meta.data$seurat_clusters),
-                              as.character(unique(Seurat_Obj@meta.data$seurat_clusters)))
-    
-    ### print the number of clusters in the R object
-    writeLines(paste(f, "-Unique Cluster #-", length(cluster_list)))
-    
-    ### run only if there are more than one clusters
-    if(length(cluster_list) > 1) {
-      ### Ident configure
-      Idents(object = Seurat_Obj) <- Seurat_Obj@meta.data$seurat_clusters
       
-      ### DE analysis with DESeq2
-      all_de_result <- FindAllMarkers(object = Seurat_Obj, test.use = "DESeq2",
-                                      logfc.threshold = 0, min.pct = 0.1)
+      ### existing clusters
+      cluster_list <- intersect(levels(Seurat_Obj@meta.data$new_clusts),
+                                as.character(unique(Seurat_Obj@meta.data$new_clusts)))
       
-      ### GO Enrichment for each cluster
-      for(cluster in cluster_list) {
+      ### print the number of clusters in the R object
+      writeLines(paste(f, "-Unique Cluster #-", length(cluster_list)))
+      
+      ### run only if there are more than one clusters
+      if(length(cluster_list) > 1) {
+        ### set the ident of the object with the new cluster info
+        Seurat_Obj <- SetIdent(object = Seurat_Obj,
+                               cells = rownames(Seurat_Obj@meta.data),
+                               value = Seurat_Obj@meta.data$new_clusts)
         
-        ### new output dir
-        outputDir2 <- paste0(outputDir2, cluster, "/")
-        dir.create(outputDir2, recursive = TRUE, showWarnings = FALSE)
+        ### DE analysis with DESeq2
+        all_de_result <- FindAllMarkers(object = Seurat_Obj, test.use = "DESeq2",
+                                        logfc.threshold = 0, min.pct = 0.1)
         
-        ### extract certain DE result
-        de_result <- all_de_result[which(all_de_result$cluster == cluster),]
-        
-        if(nrow(de_result) > 0) {
-          ### change the column order
-          de_result <- data.frame(gene=de_result$gene,
-                                  cluster=de_result$cluster,
-                                  de_result[,-c(6,7)],
-                                  stringsAsFactors = FALSE, check.names = FALSE)
+        ### GO Enrichment for each cluster
+        for(cluster in cluster_list) {
           
-          ### write out the result
-          write.xlsx2(de_result, file = paste0(outputDir2, f, "_GO_enrichment_result_", cluster, ".xlsx"),
-                      row.names = FALSE, sheetName = "DE_Result", append = FALSE)
+          ### new output dir
+          outputDir3 <- paste0(outputDir2, cluster, "/")
+          dir.create(outputDir3, recursive = TRUE, showWarnings = FALSE)
           
-          ### GO Enrichment analysis with the DE genes
-          go_result <- pathwayAnalysis_CP(geneList = mapIds(org.Mm.eg.db, de_result$gene, "ENTREZID", "SYMBOL"),
-                                          org = "mouse", database = "GO",
-                                          title = paste0(f, "_results_", cluster),
-                                          displayNum = 50, imgPrint = TRUE,
-                                          dir = paste0(outputDir2))
+          ### extract certain DE result
+          de_result <- all_de_result[which(all_de_result$cluster == cluster),]
           
-          ### write out the GO result
-          write.xlsx2(go_result, file = paste0(outputDir2, f, "_GO_enrichment_result_", cluster, ".xlsx"),
-                      row.names = FALSE, sheetName = "GO_Result", append = TRUE)
+          if(nrow(de_result) > 0) {
+            ### change the column order
+            de_result <- data.frame(gene=de_result$gene,
+                                    cluster=de_result$cluster,
+                                    de_result[,-c(6,7)],
+                                    stringsAsFactors = FALSE, check.names = FALSE)
+            
+            ### write out the result
+            write.xlsx2(de_result, file = paste0(outputDir3, f, "_GO_enrichment_result_", cluster, ".xlsx"),
+                        row.names = FALSE, sheetName = "DE_Result", append = FALSE)
+            
+            ### GO Enrichment analysis with the DE genes
+            go_result <- pathwayAnalysis_CP(geneList = mapIds(org.Mm.eg.db, de_result$gene, "ENTREZID", "SYMBOL"),
+                                            org = "mouse", database = "GO",
+                                            title = paste0(f, "_results_", cluster),
+                                            displayNum = 50, imgPrint = TRUE,
+                                            dir = paste0(outputDir3))
+            
+            ### write out the GO result
+            write.xlsx2(go_result, file = paste0(outputDir3, f, "_GO_enrichment_result_", cluster, ".xlsx"),
+                        row.names = FALSE, sheetName = "GO_Result", append = TRUE)
+          }
+          
         }
-        
       }
+      
+    } else {
+      writeLines(paste("Warning:", f, "(nrow < 1 or names do not match)"))
     }
+    
   }
   
 }
