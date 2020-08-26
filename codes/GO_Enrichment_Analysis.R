@@ -206,7 +206,7 @@ go_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/HSPC Su
     if(nrow(Seurat_Obj@meta.data) > 1 && identical(names(Idents(object = Seurat_Obj)), rownames(Seurat_Obj@meta.data))) {
       
       ### clustering on the R object
-      Seurat_Obj <- FindNeighbors(Seurat_Obj, dims = 1:5, k.param = 5)
+      Seurat_Obj <- FindNeighbors(Seurat_Obj, dims = 1:5, k.param = ifelse(nrow(Seurat_Obj@meta.data) > 5, 5, nrow(Seurat_Obj@meta.data)))
       Seurat_Obj <- FindClusters(Seurat_Obj, resolution = 0.4)
       Seurat_Obj@meta.data$new_clusts <- Idents(Seurat_Obj)
       
@@ -235,6 +235,11 @@ go_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/HSPC Su
         ### DE analysis with DESeq2
         all_de_result <- FindAllMarkers(object = Seurat_Obj, test.use = "DESeq2",
                                         logfc.threshold = 0, min.pct = 0.1)
+        
+        ### write the DE result
+        write.xlsx2(all_de_result, file = paste0(outputDir2, "DESeq2_", f, "_Clusters.xlsx"),
+                    sheetName = paste0("DESeq2_", f))
+        gc()
         
         ### GO Enrichment for each cluster
         for(cluster in cluster_list) {
@@ -274,6 +279,116 @@ go_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/HSPC Su
       
     } else {
       writeLines(paste("Warning:", f, "(nrow < 1 or names do not match)"))
+    }
+    
+  }
+  
+  ### GO Enrichment analysis across development
+  ### THIS CODE NEEDS THE "Combined_Seurat_Obj.RDATA"
+  ### GENERATED FROM THE "Pseudotime_Analysis.R"
+  
+  ### load the RDATA file
+  load("./data/Combined_Seurat_Obj.RDATA")
+  
+  ### determine necessary variables
+  time_points <- c("E16", "E18", "P0", "ADULT")
+  HSPC_populations <- c("LTHSC", "STHSC", "MPP2", "MPP3", "MPP4")
+  possible_names <- as.vector(sapply(time_points, function(x) paste0(x, HSPC_populations)))
+  possible_names_mat <- data.frame(Names=possible_names,
+                                   Time=as.vector(sapply(time_points, function(x) rep(x, length(HSPC_populations)))),
+                                   HSPC=rep(HSPC_populations, length(time_points)),
+                                   stringsAsFactors = FALSE, check.names = FALSE)
+  row.names(possible_names_mat) <- possible_names
+  
+  #
+  ### separate the combined into different cell groups
+  #
+  
+  ### set the ident of the object with the HSPC type
+  Combined_Seurat_Obj <- SetIdent(object = Combined_Seurat_Obj,
+                                  cells = rownames(Combined_Seurat_Obj@meta.data),
+                                  value = Combined_Seurat_Obj@meta.data$HSPC)
+  
+  ### check whether the orders are the same
+  print(identical(names(Idents(object = Combined_Seurat_Obj)), rownames(Combined_Seurat_Obj@meta.data)))
+  
+  ### for each cell population
+  for(type in HSPC_populations) {
+    
+    ### new output directory
+    outputDir2 <- paste0(outputDir, type, "/")
+    dir.create(outputDir2, showWarnings = FALSE, recursive = TRUE)
+    
+    ### split the Seurat obj based on HSPC info
+    Seurat_Obj <- subset(Combined_Seurat_Obj, idents=type)
+    
+    ### order the meta data by developmental time
+    Seurat_Obj@meta.data <- Seurat_Obj@meta.data[order(factor(Seurat_Obj@meta.data$Development,
+                                                              levels = time_points)),]
+    
+    ### rownames in the meta.data should be in the same order as colnames in the counts
+    Seurat_Obj@assays$RNA@counts <- Seurat_Obj@assays$RNA@counts[,rownames(Seurat_Obj@meta.data)]
+    
+    ### run PCA
+    Seurat_Obj <- FindVariableFeatures(Seurat_Obj)
+    Seurat_Obj <- ScaleData(Seurat_Obj)
+    Seurat_Obj <- RunPCA(Seurat_Obj, npcs = 10)
+    
+    ### run UMAP
+    Seurat_Obj <- RunUMAP(Seurat_Obj, dims = 1:5, n.neighbors = ifelse(nrow(Seurat_Obj@meta.data) > 30, 30, nrow(Seurat_Obj@meta.data)))
+    
+    ### print out the UMAP of the R object
+    DimPlot(Seurat_Obj, reduction = "umap", group.by = "Development", pt.size = 2) +
+      labs(title = paste0("UMAP_", type, "_Development"))
+    ggsave(file = paste0(outputDir2, "UMAP_", type, "_Development.png"), width = 12, height = 8, dpi = 300)
+    
+    ### set the ident of the object with the development info
+    Seurat_Obj <- SetIdent(object = Seurat_Obj,
+                           cells = rownames(Seurat_Obj@meta.data),
+                           value = Seurat_Obj@meta.data$Development)
+    
+    ### DE analysis with DESeq2
+    all_de_result <- FindAllMarkers(object = Seurat_Obj, test.use = "DESeq2",
+                                    logfc.threshold = 0, min.pct = 0.1)
+    
+    ### write the DE result
+    write.xlsx2(all_de_result, file = paste0(outputDir2, "DESeq2_", type, "_Development.xlsx"),
+                sheetName = paste0("DESeq2_", type))
+    gc()
+    
+    ### GO Enrichment for each development
+    for(tp in time_points) {
+      
+      ### new output dir
+      outputDir3 <- paste0(outputDir2, tp, "/")
+      dir.create(outputDir3, recursive = TRUE, showWarnings = FALSE)
+      
+      ### extract certain DE result
+      de_result <- all_de_result[which(all_de_result$cluster == tp),]
+      
+      if(nrow(de_result) > 0) {
+        ### change the column order
+        de_result <- data.frame(gene=de_result$gene,
+                                Development=de_result$cluster,
+                                de_result[,-c(6,7)],
+                                stringsAsFactors = FALSE, check.names = FALSE)
+        
+        ### write out the result
+        write.xlsx2(de_result, file = paste0(outputDir3, type, "_GO_enrichment_result_", tp, ".xlsx"),
+                    row.names = FALSE, sheetName = "DE_Result", append = FALSE)
+        
+        ### GO Enrichment analysis with the DE genes
+        go_result <- pathwayAnalysis_CP(geneList = mapIds(org.Mm.eg.db, de_result$gene, "ENTREZID", "SYMBOL"),
+                                        org = "mouse", database = "GO",
+                                        title = paste0(type, "_results_", tp),
+                                        displayNum = 50, imgPrint = TRUE,
+                                        dir = paste0(outputDir3))
+        
+        ### write out the GO result
+        write.xlsx2(go_result, file = paste0(outputDir3, type, "_GO_enrichment_result_", tp, ".xlsx"),
+                    row.names = FALSE, sheetName = "GO_Result", append = TRUE)
+      }
+      
     }
     
   }
