@@ -860,6 +860,9 @@ pseudotime_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses
     ### rownames in the meta.data should be in the same order as colnames in the counts
     Seurat_Obj@meta.data <- Seurat_Obj@meta.data[colnames(Seurat_Obj@assays$RNA@counts),]
     
+    ### active assay = "RNA"
+    Seurat_Obj@active.assay <- "RNA"
+    
     ### set output directory
     outputDir2 <- paste0(outputDir, f, "/")
     dir.create(outputDir2, recursive = TRUE, showWarnings = FALSE)
@@ -883,24 +886,30 @@ pseudotime_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses
     }
     
     ### run only if there are enough number of cells in the R object
-    if(nrow(Seurat_Obj@meta.data) > 1) {
+    if(nrow(Seurat_Obj@meta.data) > 1 && identical(names(Idents(object = Seurat_Obj)), rownames(Seurat_Obj@meta.data))) {
       
+      ### clustering on the R object
+      Seurat_Obj <- FindNeighbors(Seurat_Obj, dims = 1:5, k.param = 5)
+      Seurat_Obj <- FindClusters(Seurat_Obj, resolution = 0.4)
+      Seurat_Obj@meta.data$new_clusts <- Idents(Seurat_Obj)
+      
+      #
       ### run pseudotime analysis with the current R object
-      
+      #
       ### get PCA matrix
       pca_map <- Embeddings(Seurat_Obj, reduction = "pca")[rownames(Seurat_Obj@meta.data),1:5]
       
       ### get slingshot object
-      slingshot_obj <- slingshot(pca_map, clusterLabels = Seurat_Obj@meta.data$seurat_clusters, reducedDim = "PCA")
+      slingshot_obj <- slingshot(pca_map, clusterLabels = Seurat_Obj@meta.data$new_clusts, reducedDim = "PCA")
       
       ### get colors for the clustering result
-      cell_colors_clust <- cell_pal(levels(Seurat_Obj@meta.data$seurat_clusters), hue_pal())
+      cell_colors_clust <- cell_pal(levels(Seurat_Obj@meta.data$new_clusts), hue_pal())
       
       ### Trajectory inference
       png(paste0(outputDir2, "Trajectory_Inference_", tissue_name, "_PCA.png"), width = 2500, height = 1500, res = 200)
       plot(pca_map,
            main="Trajectory Inference Based On Seurat Clusters (PCA)",
-           col = cell_colors_clust[as.character(Seurat_Obj@meta.data$seurat_clusters)],
+           col = cell_colors_clust[as.character(Seurat_Obj@meta.data$new_clusts)],
            pch = 19, cex = 1)
       lines(slingshot_obj, lwd = 2, type = "lineages", col = "black",
             show.constraints = TRUE, constraints.col = cell_colors_clust)
@@ -931,6 +940,8 @@ pseudotime_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses
       ### See specific gene expressions over lineages
       # plotGenePseudotime(slingshot_obj, "Gene_Name", as.matrix(Seurat_Obj@assays$RNA@counts))
       
+    } else {
+      writeLines(paste("Warning:", f, "(nrow < 1 or names do not match)"))
     }
     
   }
