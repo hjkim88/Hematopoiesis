@@ -39,6 +39,11 @@ rna_magnet_trent <- function(Seurat_RObj_path="./data/Combined_BM_Seurat_Obj.RDA
                              outputDir="./results/RNA-Magnet/") {
   
   ### load libraries
+  options(java.parameters = "-Xmx10240m")
+  if(!require(xlsx, quietly = TRUE)) {
+    install.packages("xlsx")
+    require(xlsx, quietly = TRUE)
+  }
   if(!require(remotes, quietly = TRUE)) {
     install.packages("remotes")
     require(remotes, quietly = TRUE)
@@ -58,6 +63,10 @@ rna_magnet_trent <- function(Seurat_RObj_path="./data/Combined_BM_Seurat_Obj.RDA
   if(!require(Rmagic, quietly = TRUE)) {
     install.packages("Rmagic")
     require(Rmagic, quietly = TRUE)
+  }
+  if(!require(ggplot2, quietly = TRUE)) {
+    install.packages("ggplot2")
+    require(ggplot2, quietly = TRUE)
   }
   
   ### see python environment since RNAMagnet uses the python module 'magic'
@@ -125,33 +134,63 @@ rna_magnet_trent <- function(Seurat_RObj_path="./data/Combined_BM_Seurat_Obj.RDA
     
     ### There should be at least two clusters for RNAMagnet
     if(length(unique(subset_Seurat_Obj@meta.data$seurat_clusters)) > 1) {
-      ### for each cluster, set the cluster as the anchor and run RNAMagnet
-      for(clust in unique(subset_Seurat_Obj@meta.data$seurat_clusters)) {
+      
+      ### set the ident of the seurat object with the cluster info
+      subset_Seurat_Obj <- SetIdent(object = subset_Seurat_Obj,
+                                    cells = rownames(subset_Seurat_Obj@meta.data),
+                                    value = subset_Seurat_Obj@meta.data$seurat_clusters)
+      
+      ### run RNAMagnet
+      result <- RNAMagnetAnchors(subset_Seurat_Obj,
+                                 anchors = unique(subset_Seurat_Obj@meta.data$seurat_clusters))
+      
+      ### write the result as an Excel file
+      write.xlsx2(data.frame(Cell=rownames(result), result,
+                             stringsAsFactors = FALSE, check.names = FALSE),
+                  file = paste0(outputDir2, "RNAMagnet_Result_", obj, ".xlsx"),
+                  sheetName = paste0("RNAMagnet_", obj),
+                  row.names = FALSE)
+      
+      ### RNAMagnet on PCA
+      qplot(x =Embeddings(subset_Seurat_Obj,reduction="pca")[,1],
+            y=Embeddings(subset_Seurat_Obj,reduction="pca")[,2],
+            color = direction,
+            size=I(0.75),
+            alpha= adhesiveness,data=result) +
+        scale_color_brewer(name = "RNAMagnet\nLocation",palette= "Set1") +
+        scale_alpha_continuous(name = "RNAMagnet\nAdhesiveness") +
+        theme_bw() +
+        theme(panel.grid = element_blank(),
+              axis.text = element_blank(),
+              axis.title = element_blank())
+      
+      ###
+      subset_Seurat_Obj@meta.data$direction <- result[rownames(subset_Seurat_Obj@meta.data),"direction"]
+      
+      
+      ### make a data frame for ggplot
+      plot_df <- data.frame(X=subset_Seurat_Obj@reductions$pca@cell.embeddings[,"PC_1"],
+                            Y=subset_Seurat_Obj@reductions$pca@cell.embeddings[,"PC_2"],
+                            group_color = subset_Seurat_Obj@meta.data$Day,
+                            group_shape = subset_Seurat_Obj@meta.data$Tissue,
+                            group_alpha = subset_Seurat_Obj@meta.data)
+      
+      ###
+      ggplot(plot_df, aes_string(x="X", y="Y")) +
+        geom_point(aes_string(col="Group", shape="Group2"), size=2, alpha=0.6) +
+        xlab(x_label) + ylab(y_label) +
+        xlim(x_range[1], x_range[2]) + ylim(y_range[1], y_range[2]) +
+        ggtitle("All") +
+        theme_classic(base_size = 16) +
+        theme(legend.position = "none", legend.title = element_blank(),
+              plot.title = element_text(hjust = 0.5),
+              legend.spacing.y = unit(0, "mm"),
+              legend.background = element_blank(),
+              legend.box.background = element_rect(colour = "gray50"))
         
-        ### set the ident of the seurat object with the cluster info
-        subset_Seurat_Obj <- SetIdent(object = subset_Seurat_Obj,
-                                      cells = rownames(subset_Seurat_Obj@meta.data),
-                                      value = subset_Seurat_Obj@meta.data$seurat_clusters)
         
-        ### run RNAMagnet
-        result <- RNAMagnetAnchors(subset_Seurat_Obj,
-                                   anchors = unique(subset_Seurat_Obj@meta.data$seurat_clusters))
         
-        ### RNAMagnet on PCA
-        qplot(x =Embeddings(subset_Seurat_Obj,reduction="pca")[,1],
-              y=Embeddings(subset_Seurat_Obj,reduction="pca")[,2],
-              color = direction,
-              size=I(0.75),
-              alpha= adhesiveness,data=result) +
-          scale_color_brewer(name = "RNAMagnet\nLocation",palette= "Set1") +
-          scale_alpha_continuous(name = "RNAMagnet\nAdhesiveness") +
-          theme_bw() +
-          theme(panel.grid = element_blank(),
-                axis.text = element_blank(),
-                axis.title = element_blank())
-        
-      }
-    }
+    } 
     
   }
   
