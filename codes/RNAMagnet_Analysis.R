@@ -32,12 +32,10 @@
 #   Example
 #               > source("The_directory_of_RNAMagnet_Analysis.R/RNAMagnet_Analysis.R")
 #               > rna_magnet_trent(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/Stroma and Heme/",
-#                                  Seurat_RObj_path="./data/Combined_BM_Seurat_Obj.RDATA",
 #                                  outputDir="./results/RNA-Magnet/")
 ###
 
 rna_magnet_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/Stroma and Heme/",
-                             Seurat_RObj_path="./data/Combined_BM_Seurat_Obj.RDATA",
                              outputDir="./results/RNA-Magnet/") {
   
   ### load libraries
@@ -801,6 +799,52 @@ rna_magnet_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/Stroma a
              cex = 1)
       dev.off()
       
+      ### run RNAMagnet signaling
+      result2 <- RNAMagnetSignaling(Seurat_Obj)
+      
+      ### draw signaling network
+      png(paste0(outputDir2, "Signaling_RNAMagnet_Network_", obj, ".png"), width = 2400, height = 1200, res = 120)
+      set.seed(1234)
+      PlotSignalingNetwork(result2, threshold = 0.01,
+                           colors = cell_colors_clust,
+                           useLabels = TRUE,
+                           main = paste0("Signaling_RNAMagnet_", obj))
+      legend("left",
+             title = "Clusters",
+             legend = names(cell_colors_clust),
+             fill = cell_colors_clust,
+             border = NA,
+             bty = "o",
+             x.intersp = 1,
+             y.intersp = 0.8,
+             cex = 1)
+      dev.off()
+      
+      ### get all the interaction list
+      interaction_list <- NULL
+      for(clust1 in names(cell_colors_clust)) {
+        for(clust2 in names(cell_colors_clust)) {
+          il <- getRNAMagnetGenes(result2, clust1, clust2, thresh = 0.05)
+          if(nrow(il) > 0) {
+            il$ligand_cluster <- clust1
+            il$receptor_cluster <- clust2
+            if(is.null(interaction_list)) {
+              interaction_list <- il
+            } else {
+              interaction_list <- rbind(interaction_list, il)
+            }
+          }
+        }
+      }
+      interaction_list <- cbind(interaction_list[3:4], interaction_list[1:2])
+      colnames(interaction_list) <- c("Ligand_Cluster", "Receptor_Cluster", "Interaction_Score", "Interaction_Pair")
+      
+      ### write out the interaction list
+      write.xlsx2(interaction_list,
+                  file = paste0(outputDir2, "Signaling_RNAMagnet_Interaction_List_", obj, ".xlsx"),
+                  sheetName = paste0("Signaling_RNAMagnet_Interaction_List"),
+                  row.names = FALSE)
+      
     }
     
   }
@@ -843,7 +887,7 @@ rna_magnet_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/Stroma a
                            cells = rownames(Seurat_Obj@meta.data),
                            value = Seurat_Obj@meta.data$new_clusts)
     
-    ### run RNAMagnet
+    ### run RNAMagnet with anchors
     result <- RNAMagnetAnchors(Seurat_Obj,
                                anchors = levels(Seurat_Obj@meta.data$new_clusts))
     
@@ -1003,6 +1047,52 @@ rna_magnet_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/Stroma a
            y.intersp = 1,
            cex = 1)
     dev.off()
+    
+    ### run RNAMagnet signaling
+    result2 <- RNAMagnetSignaling(Seurat_Obj)
+    
+    ### draw signaling network
+    png(paste0(outputDir2, "Signaling_RNAMagnet_Network_", tp, ".png"), width = 2400, height = 1200, res = 120)
+    set.seed(1234)
+    PlotSignalingNetwork(result2, threshold = 0.01,
+                         colors = cell_colors_clust,
+                         useLabels = TRUE,
+                         main = paste0("Signaling_RNAMagnet_", tp))
+    legend("left",
+           title = "Clusters",
+           legend = names(cell_colors_clust),
+           fill = cell_colors_clust,
+           border = NA,
+           bty = "o",
+           x.intersp = 1,
+           y.intersp = 0.8,
+           cex = 1)
+    dev.off()
+    
+    ### get all the interaction list
+    interaction_list <- NULL
+    for(clust1 in names(cell_colors_clust)) {
+      for(clust2 in names(cell_colors_clust)) {
+        il <- getRNAMagnetGenes(result2, clust1, clust2, thresh = 0.05)
+        if(nrow(il) > 0) {
+          il$ligand_cluster <- clust1
+          il$receptor_cluster <- clust2
+          if(is.null(interaction_list)) {
+            interaction_list <- il
+          } else {
+            interaction_list <- rbind(interaction_list, il)
+          }
+        }
+      }
+    }
+    interaction_list <- cbind(interaction_list[3:4], interaction_list[1:2])
+    colnames(interaction_list) <- c("Ligand_Cluster", "Receptor_Cluster", "Interaction_Score", "Interaction_Pair")
+    
+    ### write out the interaction list
+    write.xlsx2(interaction_list,
+                file = paste0(outputDir2, "Signaling_RNAMagnet_Interaction_List_", tp, ".xlsx"),
+                sheetName = paste0("Signaling_RNAMagnet_Interaction_List"),
+                row.names = FALSE)
     
   }
   
