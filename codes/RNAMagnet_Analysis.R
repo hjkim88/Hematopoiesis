@@ -874,6 +874,8 @@ rna_magnet_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/Stroma a
     Seurat_Obj@assays$RNA@counts <- Seurat_Obj@assays$RNA@counts[,rownames(Seurat_Obj@meta.data)]
     
     ### run PCA
+    Seurat_Obj <- FindVariableFeatures(Seurat_Obj)
+    Seurat_Obj <- ScaleData(Seurat_Obj)
     Seurat_Obj <- RunPCA(Seurat_Obj, npcs = 15)
     pca_map <- Embeddings(Seurat_Obj, reduction = "pca")[rownames(Seurat_Obj@meta.data),1:15]
     
