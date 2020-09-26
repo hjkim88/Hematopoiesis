@@ -1,6 +1,14 @@
 ### THIS IS AN EXAMPLE CODE FOR PC1 GENE - HEATMAP & PATHWAY ANALYSIS
 
 ### load libraries
+if(!require(Seurat, quietly = TRUE)) {
+  install.packages("Seurat")
+  require(Seurat, quietly = TRUE)
+}
+if(!require(ggplot2, quietly = TRUE)) {
+  install.packages("ggplot2")
+  require(ggplot2, quietly = TRUE)
+}
 if(!require(RColorBrewer, quietly = TRUE)) {
   install.packages("RColorBrewer")
   require(RColorBrewer, quietly = TRUE)
