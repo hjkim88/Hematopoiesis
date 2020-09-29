@@ -17,6 +17,14 @@ if(!require(gplots, quietly = TRUE)) {
   install.packages("gplots")
   library(gplots, quietly = TRUE)
 }
+if(!require(msigdbr, quietly = TRUE)) {
+  install.packages("msigdbr")
+  library(msigdbr, quietly = TRUE)
+}
+if(!require(xlsx, quietly = TRUE)) {
+  install.packages("xlsx")
+  require(xlsx, quietly = TRUE)
+}
 
 ### set parameters
 Robj_path <- "./data/Combined_Seurat_Obj.RDATA"
@@ -949,8 +957,36 @@ run_gsea <- function(gene_list,
   
 }
 
-### msigdb pacakge + reactome db of fgsea
+#
+### msigdb pacakge + fgsea
 ### signature: PC1 contribution
+#
+
+### signature preparation
+signat <- pca_contb[important_genes,"PC_1"]
+names(signat) <- important_genes
+
+### db preparation
+# MSIGDB
+m_df <- msigdbr(species = "Mus musculus")
+m_list <- m_df %>% split(x = .$gene_symbol, f = .$gs_name)
+
+### run GSEA
+GSEA_result <- run_gsea(gene_list = m_list, signature = list(signat), printPlot = FALSE)
+GSEA_result <- GSEA_result[order(GSEA_result$pval),]
+
+### only get pathways that have pval < 0.01
+pathways <- GSEA_result$pathway[intersect(which(GSEA_result$pval < 0.01),
+                                          which(GSEA_result$size > 5))]
+
+### run GSEA again with the significant result - plot printing
+GSEA_result2 <- run_gsea(gene_list = m_list[pathways], signature = list(signat),
+                         printPlot = TRUE, printPath = "./results/")
+
+### msigdb pathway detailed descriptions
+
+
+### write out the result file
 
 
 
