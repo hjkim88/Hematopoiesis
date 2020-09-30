@@ -804,6 +804,7 @@ run_gsea <- function(gene_list,
 multiple_analyses_in_one <- function(Seurat_Object,
                                      target_ident=NULL,
                                      target_col,
+                                     species=c("human", "mouse"),
                                      PC="PC_1",
                                      PC_Val=NULL,
                                      important_thresh=0.1,
@@ -929,20 +930,24 @@ multiple_analyses_in_one <- function(Seurat_Object,
   
   
   ### pathway analysis with the important genes of the given PC
-  pathway_result_GO <- pathwayAnalysis_CP(geneList = mapIds(org.Mm.eg.db,
-                                                            important_genes,
-                                                            "ENTREZID", "SYMBOL"),
-                                          org = "mouse", database = "GO",
-                                          title = paste0(PC, "_Pathway_Results_with_", length(important_genes), "_important_genes_", important_thresh),
-                                          displayNum = 50, imgPrint = TRUE,
-                                          dir = paste0(result_dir))
-  pathway_result_KEGG <- pathwayAnalysis_CP(geneList = mapIds(org.Mm.eg.db,
+  if(species[1] == "human") {
+    
+  } else if(species[1] == "mouse") {
+    pathway_result_GO <- pathwayAnalysis_CP(geneList = mapIds(org.Mm.eg.db,
                                                               important_genes,
                                                               "ENTREZID", "SYMBOL"),
-                                            org = "mouse", database = "KEGG",
+                                            org = species[1], database = "GO",
                                             title = paste0(PC, "_Pathway_Results_with_", length(important_genes), "_important_genes_", important_thresh),
                                             displayNum = 50, imgPrint = TRUE,
                                             dir = paste0(result_dir))
+    pathway_result_KEGG <- pathwayAnalysis_CP(geneList = mapIds(org.Mm.eg.db,
+                                                                important_genes,
+                                                                "ENTREZID", "SYMBOL"),
+                                              org = species[1], database = "KEGG",
+                                              title = paste0(PC, "_Pathway_Results_with_", length(important_genes), "_important_genes_", important_thresh),
+                                              displayNum = 50, imgPrint = TRUE,
+                                              dir = paste0(result_dir))
+  }
   write.xlsx2(pathway_result_GO, file = paste0(result_dir, PC, "_GO_Pathway_Results_with_", length(important_genes), "_important_genes_", important_thresh, ".xlsx"),
               row.names = FALSE, sheetName = paste0("GO_Results"))
   write.xlsx2(pathway_result_KEGG, file = paste0(result_dir, PC, "_KEGG_Pathway_Results_with_", length(important_genes), "_important_genes_", important_thresh, ".xlsx"),
@@ -953,17 +958,38 @@ multiple_analyses_in_one <- function(Seurat_Object,
   #
   
   ### signature preparation
-  signat <- pca_contb[important_genes,"PC_1"]
-  names(signat) <- important_genes
+  signat <- pca_contb[,PC]
+  names(signat) <- rownames(pca_contb)
   
   ### db preparation
   # MSIGDB
-  m_df <- msigdbr(species = "Mus musculus")
+  if(species[1] == "human") {
+    m_df <- msigdbr(species = "Homo sapiens") 
+  } else if(species[1] == "mouse") {
+    m_df <- msigdbr(species = "Mus musculus")
+  }
   m_list <- m_df %>% split(x = .$gene_symbol, f = .$gs_name)
   
   ### run GSEA
   GSEA_result <- run_gsea(gene_list = m_list, signature = list(signat), printPlot = FALSE)
   GSEA_result <- GSEA_result[order(GSEA_result$pval),]
+  
+  ### only get pathways that have pval < 0.05 & size > 10
+  pathways <- GSEA_result$pathway[intersect(which(GSEA_result$pval < 0.05),
+                                            which(GSEA_result$size > 10))]
+  
+  ### run GSEA again with the significant result - plot printing
+  result_dir2 <- paste0(result_dir, "GSEA/")
+  dir.create(result_dir2, showWarnings = FALSE, recursive = TRUE)
+  GSEA_result2 <- run_gsea(gene_list = m_list[pathways], signature = list(signat),
+                           printPlot = TRUE, printPath = result_dir2)
+  GSEA_result2 <- GSEA_result2[order(GSEA_result2$padj, GSEA_result2$pval),]
+  
+  ### write out the result file
+  write.xlsx2(GSEA_result2, file = paste0(result_dir2, PC, "_Genes_GSEA_Results_msigdb.xlsx",),
+              sheetName = "GSEA_Result", row.names = FALSE)
+  
+  ### same analyses with the given comparison
   
   
   
