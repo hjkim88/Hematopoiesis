@@ -28,7 +28,7 @@ if(!require(xlsx, quietly = TRUE)) {
 
 ### set parameters
 Robj_path <- "./data/Combined_Seurat_Obj.RDATA"
-outputDir <- "./results/Pseudotime/"
+outputDir <- "./results/Additional/"
 
 ### load the Seurat object and save the object name
 tmp_env <- new.env()
@@ -77,53 +77,6 @@ Combined_Seurat_Obj@meta.data <- Combined_Seurat_Obj@meta.data[colnames(Combined
 
 ### active assay = "RNA"
 Combined_Seurat_Obj@active.assay <- "RNA"
-
-### choose cell type
-#
-### MPP2
-#
-type <- "MPP2"
-
-### new output directory
-outputDir2 <- paste0(outputDir, type, "/")
-dir.create(outputDir2, showWarnings = FALSE, recursive = TRUE)
-
-### split the Seurat obj based on HSPC info
-Seurat_Obj <- subset(Combined_Seurat_Obj, idents=type)
-
-### order the meta data by developmental time
-Seurat_Obj@meta.data <- Seurat_Obj@meta.data[order(factor(Seurat_Obj@meta.data$Development,
-                                                          levels = time_points)),]
-
-### rownames in the meta.data should be in the same order as colnames in the counts
-Seurat_Obj@assays$RNA@counts <- Seurat_Obj@assays$RNA@counts[,rownames(Seurat_Obj@meta.data)]
-
-### run PCA
-Seurat_Obj <- RunPCA(Seurat_Obj, npcs = 10)
-pca_map <- Embeddings(Seurat_Obj, reduction = "pca")[rownames(Seurat_Obj@meta.data),1:10]
-
-
-### find feature contributions of the PC1 
-pca_cos2 <- Seurat_Obj@reductions$pca@feature.loadings * Seurat_Obj@reductions$pca@feature.loadings
-pca_contb <- pca_cos2
-for(i in 1:ncol(pca_contb)) {
-  s <- sum(pca_cos2[,i])
-  for(j in 1:nrow(pca_contb)) {
-    pca_contb[j,i] <- pca_cos2[j,i] * 100 / s
-  }
-}
-pca_contb <- pca_contb[order(-pca_contb[,"PC_1"]),]
-
-### PC1 density plot
-plot(density(pca_contb[,"PC_1"]))
-
-### get genes that contributed to the PC1 the most
-contb_threshold <- 0.1
-important_genes <- rownames(pca_contb)[which(pca_contb[,"PC_1"] > contb_threshold)]
-
-### get genes that contributed to the PC1 the least
-garbage_threshold <- 1e-04
-garbage_genes <- rownames(pca_contb)[which(pca_contb[,"PC_1"] < garbage_threshold)]
 
 
 ###
@@ -601,107 +554,6 @@ scale_h <- function(data, type, na.rm=TRUE) {
 dist.spear <- function(x) as.dist(1-cor(t(x), method = "spearman"))
 hclust.ave <- function(x) hclust(x, method="average")
 
-#
-### a heatmap with the important genes - 322 genes x 428 cells
-#
-
-### get a matrix for the heatmap
-heatmap_mat <- data.frame(Seurat_Obj@assays$RNA@counts[important_genes,], check.names = FALSE)
-
-### scale the data
-heatmap_mat_scaled <- scale_h(heatmap_mat, type = "row")
-
-### see the distribution of the gene expressions
-# plot(density(heatmap_mat_scaled))
-
-### because there are some outliers in positive values
-### we set the maximum as abs(minimum)
-heatmap_mat_scaled[which(heatmap_mat_scaled > abs(min(heatmap_mat_scaled)))] <- abs(min(heatmap_mat_scaled))
-
-### set colside colors
-uniqueV <- unique(Seurat_Obj@meta.data$Development)
-colors <- colorRampPalette(brewer.pal(9,"Blues"))(length(uniqueV))
-names(colors) <- uniqueV
-
-### heatmap
-png(paste0(outputDir2, "PC1_Genes_Heatmap.png"), width = 2000, height = 1000)
-par(oma=c(0,0,2,6))
-heatmap.3(as.matrix(heatmap_mat_scaled), main = paste0("PC1_Genes_Heatmap_(",
-                                                       nrow(heatmap_mat_scaled), " Genes x ",
-                                                       ncol(heatmap_mat_scaled), " Cells)"),
-          xlab = "", ylab = "", col=greenred(300),
-          scale="none", key=T, keysize=0.8, density.info="density",
-          dendrogram = "none", trace = "none",
-          labRow = rownames(heatmap_mat_scaled), labCol = FALSE,
-          Rowv = TRUE, Colv = FALSE,
-          distfun=dist.spear, hclustfun=hclust.ave,
-          ColSideColors = cbind(colors[as.character(Seurat_Obj@meta.data$Development)]),
-          cexRow = 2, cexCol = 2, na.rm = TRUE)
-legend("left", inset = 0, xpd = TRUE, title = "Time", legend = names(colors), fill = colors, cex = 2, box.lty = 0)
-dev.off()
-
-
-#
-### a heatmap with the garbage genes - 167 genes x 428 cells
-#
-
-### get a matrix for the heatmap
-heatmap_mat <- data.frame(Seurat_Obj@assays$RNA@counts[garbage_genes,], check.names = FALSE)
-
-### scale the data
-heatmap_mat_scaled <- scale_h(heatmap_mat, type = "row")
-
-### see the distribution of the gene expressions
-# plot(density(heatmap_mat_scaled))
-
-### because there are some outliers in positive values
-### we set the maximum as abs(minimum)
-heatmap_mat_scaled[which(heatmap_mat_scaled > abs(min(heatmap_mat_scaled)))] <- abs(min(heatmap_mat_scaled))
-
-### set colside colors
-uniqueV <- unique(Seurat_Obj@meta.data$Development)
-colors <- colorRampPalette(brewer.pal(9,"Blues"))(length(uniqueV))
-names(colors) <- uniqueV
-
-### heatmap
-png(paste0(outputDir2, "PC1_Genes_Heatmap_GARBAGE.png"), width = 2000, height = 1000)
-par(oma=c(0,0,2,6))
-heatmap.3(as.matrix(heatmap_mat_scaled), main = paste0("PC1_Genes_Heatmap_(",
-                                                       nrow(heatmap_mat_scaled), " Genes x ",
-                                                       ncol(heatmap_mat_scaled), " Cells)"),
-          xlab = "", ylab = "", col=greenred(300),
-          scale="none", key=T, keysize=0.8, density.info="density",
-          dendrogram = "none", trace = "none",
-          labRow = rownames(heatmap_mat_scaled), labCol = FALSE,
-          Rowv = TRUE, Colv = FALSE,
-          distfun=dist.spear, hclustfun=hclust.ave,
-          ColSideColors = cbind(colors[as.character(Seurat_Obj@meta.data$Development)]),
-          cexRow = 2, cexCol = 2, na.rm = TRUE)
-legend("left", inset = 0, xpd = TRUE, title = "Time", legend = names(colors), fill = colors, cex = 2, box.lty = 0)
-dev.off()
-
-
-### pathway analysis with the important genes of the PC1
-contb_threshold <- 0.1
-important_genes <- rownames(pca_contb)[which(pca_contb[,"PC_1"] > contb_threshold)]
-pathway_result_GO <- pathwayAnalysis_CP(geneList = mapIds(org.Mm.eg.db,
-                                                          important_genes,
-                                                          "ENTREZID", "SYMBOL"),
-                                        org = "mouse", database = "GO",
-                                        title = paste0("Pathway_Results_", length(important_genes), "_PC1_Genes_", contb_threshold),
-                                        displayNum = 50, imgPrint = TRUE,
-                                        dir = paste0(outputDir2))
-pathway_result_KEGG <- pathwayAnalysis_CP(geneList = mapIds(org.Mm.eg.db,
-                                                            important_genes,
-                                                            "ENTREZID", "SYMBOL"),
-                                          org = "mouse", database = "KEGG",
-                                          title = paste0("Pathway_Results_", length(important_genes), "_PC1_Genes_", contb_threshold),
-                                          displayNum = 50, imgPrint = TRUE,
-                                          dir = paste0(outputDir2))
-write.xlsx2(pathway_result_GO, file = paste0(outputDir2, "GO_pathway_results_", length(important_genes), "_PC1_Genes_", contb_threshold, ".xlsx"),
-            row.names = FALSE, sheetName = paste0("GO_Results"))
-write.xlsx2(pathway_result_KEGG, file = paste0(outputDir2, "KEGG_pathway_results_", length(important_genes), "_PC1_Genes_", contb_threshold, ".xlsx"),
-            row.names = FALSE, sheetName = paste0("KEGG_Results"))
 
 #
 ### GSEA with the important genes of the PC1
@@ -933,6 +785,343 @@ run_gsea <- function(gene_list,
   return(gsea_result)
   
 }
+
+
+### a function to get important & garbage genes, make heamtaps with those genes,
+### and pathway analysis with those genes, GSEA with PC contribution,
+### heatmaps with DE genes from comparison, pathway analysis with DE genes from
+### comparison, GSEA with DE genes from comparison.
+### Seurat_object: The seurat object to be analysed
+### target ident: the ident that will be analyzed, if NULL, just use the given object without split
+### target_col: a column name of the meta data of the seurat object that will be used in
+###             the pseudotime analysis and in creating heatmaps. Usually a time-associated column
+### PC: the principle component that will be analysed, default: PC1
+### PC_Val: the value of the given pc that will be used as a cutoff
+###         the comparison will be made based on this value
+### important_thresh: a contribution cut-off that will tell which genes contributed to the PC the most
+### garbage_thresh: a contribution cut-off that will tell which genes contributed to the PC the least
+### result_dir: the directory that all the results will be stored 
+multiple_analyses_in_one <- function(Seurat_Object,
+                                     target_ident=NULL,
+                                     target_col,
+                                     PC="PC_1",
+                                     PC_Val=NULL,
+                                     important_thresh=0.1,
+                                     garbage_thresh=1e-04,
+                                     result_dir="./") {
+  
+  ### check a struture
+  if(!identical(names(Idents(object = Combined_Seurat_Obj)), rownames(Combined_Seurat_Obj@meta.data))) {
+    stop("ERROR: Order of Idents of the given Seurat object does not match to that of the meta data")
+  }
+  
+  ### create the result directory if it does not exist
+  dir.create(result_dir, showWarnings = FALSE, recursive = TRUE)
+  
+  ### split the Seurat obj based on the given info
+  if(is.null(target_ident)) {
+    local_Seurat_Obj <- Seurat_Object
+  } else {
+    local_Seurat_Obj <- subset(Seurat_Object, idents=target_ident)
+  }
+  
+  ### order the meta data by developmental time
+  local_Seurat_Obj@meta.data <- local_Seurat_Obj@meta.data[order(local_Seurat_Obj@meta.data[,target_col]),]
+  
+  ### rownames in the meta.data should be in the same order as colnames in the counts
+  local_Seurat_Obj@assays$RNA@counts <- local_Seurat_Obj@assays$RNA@counts[,rownames(local_Seurat_Obj@meta.data)]
+  
+  ### run PCA
+  local_Seurat_Obj <- RunPCA(local_Seurat_Obj, npcs = 10)
+  pca_map <- Embeddings(local_Seurat_Obj, reduction = "pca")[rownames(local_Seurat_Obj@meta.data),1:10]
+  
+  ### find feature contributions of the given PC
+  pca_cos2 <- local_Seurat_Obj@reductions$pca@feature.loadings * local_Seurat_Obj@reductions$pca@feature.loadings
+  pca_contb <- pca_cos2
+  for(i in 1:ncol(pca_contb)) {
+    s <- sum(pca_cos2[,i])
+    for(j in 1:nrow(pca_contb)) {
+      pca_contb[j,i] <- pca_cos2[j,i] * 100 / s
+    }
+  }
+  pca_contb <- pca_contb[order(-pca_contb[,PC]),]
+  
+  ### write out the PC contributions
+  write.xlsx2(data.frame(Gene_Symbol=rownames(pca_contb),
+                         pca_contb,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(result_dir, PC, "_Genes_Contributions.xlsx"),
+              sheetName = paste0(PC, "_Genes_Contributions"),
+              row.names = FALSE)
+  
+  ### get genes that contributed to the PC1 the most
+  important_genes <- rownames(pca_contb)[which(pca_contb[,PC] > important_thresh)]
+  
+  ### get genes that contributed to the PC1 the least
+  garbage_genes <- rownames(pca_contb)[which(pca_contb[,PC] < garbage_thresh)]
+  
+  #
+  ### heatmap
+  #
+  
+  ### important genes
+  
+  ### set colside colors
+  uniqueV <- unique(local_Seurat_Obj@meta.data[,target_col])
+  colors <- colorRampPalette(brewer.pal(9,"Blues"))(length(uniqueV))
+  names(colors) <- uniqueV
+  
+  ### get a matrix for the heatmap
+  heatmap_mat <- data.frame(local_Seurat_Obj@assays$RNA@counts[important_genes,], check.names = FALSE)
+  
+  ### scale the data
+  heatmap_mat_scaled <- scale_h(heatmap_mat, type = "row")
+  
+  ### because there are some outliers in positive values
+  ### we set the maximum as abs(minimum)
+  heatmap_mat_scaled[which(heatmap_mat_scaled > abs(min(heatmap_mat_scaled)))] <- abs(min(heatmap_mat_scaled))
+  
+  ### heatmap
+  png(paste0(result_dir, PC, "_Heatmap_with_important_genes_", important_thresh, ".png"), width = 2000, height = 1000)
+  par(oma=c(0,0,2,6))
+  heatmap.3(as.matrix(heatmap_mat_scaled), main = paste0(PC, "_Genes_Heatmap_(",
+                                                         nrow(heatmap_mat_scaled), " Genes x ",
+                                                         ncol(heatmap_mat_scaled), " Cells)"),
+            xlab = "", ylab = "", col=greenred(300),
+            scale="none", key=T, keysize=0.8, density.info="density",
+            dendrogram = "none", trace = "none",
+            labRow = rownames(heatmap_mat_scaled), labCol = FALSE,
+            Rowv = TRUE, Colv = FALSE,
+            distfun=dist.spear, hclustfun=hclust.ave,
+            ColSideColors = cbind(colors[as.character(local_Seurat_Obj@meta.data[,target_col])]),
+            cexRow = 2, cexCol = 2, na.rm = TRUE)
+  legend("left", inset = 0, xpd = TRUE, title = "Time", legend = names(colors), fill = colors, cex = 2, box.lty = 0)
+  dev.off()
+  
+  ### garbage genes
+  
+  ### get a matrix for the heatmap
+  heatmap_mat <- data.frame(local_Seurat_Obj@assays$RNA@counts[garbage_genes,], check.names = FALSE)
+  
+  ### scale the data
+  heatmap_mat_scaled <- scale_h(heatmap_mat, type = "row")
+  
+  ### because there are some outliers in positive values
+  ### we set the maximum as abs(minimum)
+  heatmap_mat_scaled[which(heatmap_mat_scaled > abs(min(heatmap_mat_scaled)))] <- abs(min(heatmap_mat_scaled))
+  
+  ### heatmap
+  png(paste0(result_dir, PC, "_Heatmap_with_garbage_genes_",  garbage_thresh, ".png"), width = 2000, height = 1000)
+  par(oma=c(0,0,2,6))
+  heatmap.3(as.matrix(heatmap_mat_scaled), main = paste0(PC, "_Genes_Heatmap_(",
+                                                         nrow(heatmap_mat_scaled), " Genes x ",
+                                                         ncol(heatmap_mat_scaled), " Cells)"),
+            xlab = "", ylab = "", col=greenred(300),
+            scale="none", key=T, keysize=0.8, density.info="density",
+            dendrogram = "none", trace = "none",
+            labRow = rownames(heatmap_mat_scaled), labCol = FALSE,
+            Rowv = TRUE, Colv = FALSE,
+            distfun=dist.spear, hclustfun=hclust.ave,
+            ColSideColors = cbind(colors[as.character(local_Seurat_Obj@meta.data[,target_col])]),
+            cexRow = 2, cexCol = 2, na.rm = TRUE)
+  legend("left", inset = 0, xpd = TRUE, title = "Time", legend = names(colors), fill = colors, cex = 2, box.lty = 0)
+  dev.off()
+  
+  
+  ### pathway analysis with the important genes of the given PC
+  pathway_result_GO <- pathwayAnalysis_CP(geneList = mapIds(org.Mm.eg.db,
+                                                            important_genes,
+                                                            "ENTREZID", "SYMBOL"),
+                                          org = "mouse", database = "GO",
+                                          title = paste0(PC, "_Pathway_Results_with_", length(important_genes), "_important_genes_", important_thresh),
+                                          displayNum = 50, imgPrint = TRUE,
+                                          dir = paste0(result_dir))
+  pathway_result_KEGG <- pathwayAnalysis_CP(geneList = mapIds(org.Mm.eg.db,
+                                                              important_genes,
+                                                              "ENTREZID", "SYMBOL"),
+                                            org = "mouse", database = "KEGG",
+                                            title = paste0(PC, "_Pathway_Results_with_", length(important_genes), "_important_genes_", important_thresh),
+                                            displayNum = 50, imgPrint = TRUE,
+                                            dir = paste0(result_dir))
+  write.xlsx2(pathway_result_GO, file = paste0(result_dir, PC, "_GO_Pathway_Results_with_", length(important_genes), "_important_genes_", important_thresh, ".xlsx"),
+              row.names = FALSE, sheetName = paste0("GO_Results"))
+  write.xlsx2(pathway_result_KEGG, file = paste0(result_dir, PC, "_KEGG_Pathway_Results_with_", length(important_genes), "_important_genes_", important_thresh, ".xlsx"),
+              row.names = FALSE, sheetName = paste0("KEGG_Results"))
+  
+  #
+  ### GSEA
+  #
+  
+  ### signature preparation
+  signat <- pca_contb[important_genes,"PC_1"]
+  names(signat) <- important_genes
+  
+  ### db preparation
+  # MSIGDB
+  m_df <- msigdbr(species = "Mus musculus")
+  m_list <- m_df %>% split(x = .$gene_symbol, f = .$gs_name)
+  
+  ### run GSEA
+  GSEA_result <- run_gsea(gene_list = m_list, signature = list(signat), printPlot = FALSE)
+  GSEA_result <- GSEA_result[order(GSEA_result$pval),]
+  
+  
+  
+  
+}
+
+
+
+### choose cell type
+#
+### MPP2
+#
+type <- "MPP2"
+
+### new output directory
+outputDir2 <- paste0(outputDir, type, "/")
+dir.create(outputDir2, showWarnings = FALSE, recursive = TRUE)
+
+### split the Seurat obj based on HSPC info
+Seurat_Obj <- subset(Combined_Seurat_Obj, idents=type)
+
+### order the meta data by developmental time
+Seurat_Obj@meta.data <- Seurat_Obj@meta.data[order(factor(Seurat_Obj@meta.data$Development,
+                                                          levels = time_points)),]
+
+### rownames in the meta.data should be in the same order as colnames in the counts
+Seurat_Obj@assays$RNA@counts <- Seurat_Obj@assays$RNA@counts[,rownames(Seurat_Obj@meta.data)]
+
+### run PCA
+Seurat_Obj <- RunPCA(Seurat_Obj, npcs = 10)
+pca_map <- Embeddings(Seurat_Obj, reduction = "pca")[rownames(Seurat_Obj@meta.data),1:10]
+
+
+### find feature contributions of the PC1 
+pca_cos2 <- Seurat_Obj@reductions$pca@feature.loadings * Seurat_Obj@reductions$pca@feature.loadings
+pca_contb <- pca_cos2
+for(i in 1:ncol(pca_contb)) {
+  s <- sum(pca_cos2[,i])
+  for(j in 1:nrow(pca_contb)) {
+    pca_contb[j,i] <- pca_cos2[j,i] * 100 / s
+  }
+}
+pca_contb <- pca_contb[order(-pca_contb[,"PC_1"]),]
+
+### PC1 density plot
+plot(density(pca_contb[,"PC_1"]))
+
+### get genes that contributed to the PC1 the most
+contb_threshold <- 0.1
+important_genes <- rownames(pca_contb)[which(pca_contb[,"PC_1"] > contb_threshold)]
+
+### get genes that contributed to the PC1 the least
+garbage_threshold <- 1e-04
+garbage_genes <- rownames(pca_contb)[which(pca_contb[,"PC_1"] < garbage_threshold)]
+
+
+#
+### a heatmap with the important genes - 322 genes x 428 cells
+#
+
+### get a matrix for the heatmap
+heatmap_mat <- data.frame(Seurat_Obj@assays$RNA@counts[important_genes,], check.names = FALSE)
+
+### scale the data
+heatmap_mat_scaled <- scale_h(heatmap_mat, type = "row")
+
+### see the distribution of the gene expressions
+# plot(density(heatmap_mat_scaled))
+
+### because there are some outliers in positive values
+### we set the maximum as abs(minimum)
+heatmap_mat_scaled[which(heatmap_mat_scaled > abs(min(heatmap_mat_scaled)))] <- abs(min(heatmap_mat_scaled))
+
+### set colside colors
+uniqueV <- unique(Seurat_Obj@meta.data$Development)
+colors <- colorRampPalette(brewer.pal(9,"Blues"))(length(uniqueV))
+names(colors) <- uniqueV
+
+### heatmap
+png(paste0(outputDir2, "PC1_Genes_Heatmap.png"), width = 2000, height = 1000)
+par(oma=c(0,0,2,6))
+heatmap.3(as.matrix(heatmap_mat_scaled), main = paste0("PC1_Genes_Heatmap_(",
+                                                       nrow(heatmap_mat_scaled), " Genes x ",
+                                                       ncol(heatmap_mat_scaled), " Cells)"),
+          xlab = "", ylab = "", col=greenred(300),
+          scale="none", key=T, keysize=0.8, density.info="density",
+          dendrogram = "none", trace = "none",
+          labRow = rownames(heatmap_mat_scaled), labCol = FALSE,
+          Rowv = TRUE, Colv = FALSE,
+          distfun=dist.spear, hclustfun=hclust.ave,
+          ColSideColors = cbind(colors[as.character(Seurat_Obj@meta.data$Development)]),
+          cexRow = 2, cexCol = 2, na.rm = TRUE)
+legend("left", inset = 0, xpd = TRUE, title = "Time", legend = names(colors), fill = colors, cex = 2, box.lty = 0)
+dev.off()
+
+
+#
+### a heatmap with the garbage genes - 167 genes x 428 cells
+#
+
+### get a matrix for the heatmap
+heatmap_mat <- data.frame(Seurat_Obj@assays$RNA@counts[garbage_genes,], check.names = FALSE)
+
+### scale the data
+heatmap_mat_scaled <- scale_h(heatmap_mat, type = "row")
+
+### see the distribution of the gene expressions
+# plot(density(heatmap_mat_scaled))
+
+### because there are some outliers in positive values
+### we set the maximum as abs(minimum)
+heatmap_mat_scaled[which(heatmap_mat_scaled > abs(min(heatmap_mat_scaled)))] <- abs(min(heatmap_mat_scaled))
+
+### set colside colors
+uniqueV <- unique(Seurat_Obj@meta.data$Development)
+colors <- colorRampPalette(brewer.pal(9,"Blues"))(length(uniqueV))
+names(colors) <- uniqueV
+
+### heatmap
+png(paste0(outputDir2, "PC1_Genes_Heatmap_GARBAGE.png"), width = 2000, height = 1000)
+par(oma=c(0,0,2,6))
+heatmap.3(as.matrix(heatmap_mat_scaled), main = paste0("PC1_Genes_Heatmap_(",
+                                                       nrow(heatmap_mat_scaled), " Genes x ",
+                                                       ncol(heatmap_mat_scaled), " Cells)"),
+          xlab = "", ylab = "", col=greenred(300),
+          scale="none", key=T, keysize=0.8, density.info="density",
+          dendrogram = "none", trace = "none",
+          labRow = rownames(heatmap_mat_scaled), labCol = FALSE,
+          Rowv = TRUE, Colv = FALSE,
+          distfun=dist.spear, hclustfun=hclust.ave,
+          ColSideColors = cbind(colors[as.character(Seurat_Obj@meta.data$Development)]),
+          cexRow = 2, cexCol = 2, na.rm = TRUE)
+legend("left", inset = 0, xpd = TRUE, title = "Time", legend = names(colors), fill = colors, cex = 2, box.lty = 0)
+dev.off()
+
+
+### pathway analysis with the important genes of the PC1
+contb_threshold <- 0.1
+important_genes <- rownames(pca_contb)[which(pca_contb[,"PC_1"] > contb_threshold)]
+pathway_result_GO <- pathwayAnalysis_CP(geneList = mapIds(org.Mm.eg.db,
+                                                          important_genes,
+                                                          "ENTREZID", "SYMBOL"),
+                                        org = "mouse", database = "GO",
+                                        title = paste0("Pathway_Results_", length(important_genes), "_PC1_Genes_", contb_threshold),
+                                        displayNum = 50, imgPrint = TRUE,
+                                        dir = paste0(outputDir2))
+pathway_result_KEGG <- pathwayAnalysis_CP(geneList = mapIds(org.Mm.eg.db,
+                                                            important_genes,
+                                                            "ENTREZID", "SYMBOL"),
+                                          org = "mouse", database = "KEGG",
+                                          title = paste0("Pathway_Results_", length(important_genes), "_PC1_Genes_", contb_threshold),
+                                          displayNum = 50, imgPrint = TRUE,
+                                          dir = paste0(outputDir2))
+write.xlsx2(pathway_result_GO, file = paste0(outputDir2, "GO_pathway_results_", length(important_genes), "_PC1_Genes_", contb_threshold, ".xlsx"),
+            row.names = FALSE, sheetName = paste0("GO_Results"))
+write.xlsx2(pathway_result_KEGG, file = paste0(outputDir2, "KEGG_pathway_results_", length(important_genes), "_PC1_Genes_", contb_threshold, ".xlsx"),
+            row.names = FALSE, sheetName = paste0("KEGG_Results"))
+
 
 #
 ### msigdb pacakge + fgsea
