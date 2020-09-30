@@ -790,29 +790,6 @@ run_gsea <- function(gene_list,
     stop("ERROR: \"gene_list\" and \"signature\" cannot be both \"list\"")
   }
   
-  ### A function to correct p-values with Benjamini-Hochberg approach
-  correct_bh <- function(pvs) {
-    
-    temp <- cbind(p=pvs, No=seq(1:length(pvs)))
-    
-    if(length(which(is.na(temp[,"p"]))) > 0) {
-      temp[which(is.na(temp[,"p"])),"p"] <- 1
-    }
-    
-    temp <- temp[order(temp[,"p"]),]
-    temp <- cbind(temp, Rank=seq(1:length(pvs)), BH=1)
-    
-    
-    temp[length(pvs), "BH"] <- temp[length(pvs), "p"]
-    for(i in (length(pvs)-1):1) {
-      temp[i,"BH"] <- min(temp[i+1, "BH"], temp[i,"p"]*length(pvs)/temp[i,"Rank"])
-    }
-    
-    temp <- temp[order(temp[,"No"]),]
-    
-    return(as.numeric(temp[,"BH"]))
-  }
-  
   ### set random seed
   set.seed(1234)
   
@@ -831,7 +808,7 @@ run_gsea <- function(gene_list,
     
     ### compute FDRs
     corrected_gsea_result <- gsea_result[order(gsea_result$pval),]
-    corrected_gsea_result$padj <- correct_bh(corrected_gsea_result$pval)
+    corrected_gsea_result$padj <- p.adjust(corrected_gsea_result$pval, method = "BH")
     gsea_result <- corrected_gsea_result[rownames(gsea_result),]
   }
   ### if there are more than one gene sets
@@ -975,18 +952,19 @@ m_list <- m_df %>% split(x = .$gene_symbol, f = .$gs_name)
 GSEA_result <- run_gsea(gene_list = m_list, signature = list(signat), printPlot = FALSE)
 GSEA_result <- GSEA_result[order(GSEA_result$pval),]
 
-### only get pathways that have pval < 0.01
-pathways <- GSEA_result$pathway[intersect(which(GSEA_result$pval < 0.01),
-                                          which(GSEA_result$size > 5))]
+### only get pathways that have pval < 0.05
+pathways <- GSEA_result$pathway[intersect(which(GSEA_result$pval < 0.05),
+                                          which(GSEA_result$size > 10))]
 
 ### run GSEA again with the significant result - plot printing
 GSEA_result2 <- run_gsea(gene_list = m_list[pathways], signature = list(signat),
-                         printPlot = TRUE, printPath = "./results/")
-
-### msigdb pathway detailed descriptions
-
+                         printPlot = TRUE, printPath = "./results/GSEA/")
+GSEA_result2 <- GSEA_result2[order(GSEA_result2$padj, GSEA_result2$pval),]
 
 ### write out the result file
+write.xlsx2(GSEA_result2, file = paste0("./results/GSEA/MPP2_GSEA_msigdb_result.xlsx"),
+            sheetName = "GSEA_Result", row.names = FALSE)
+
 
 
 
