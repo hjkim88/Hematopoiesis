@@ -1114,11 +1114,6 @@ multiple_analyses_in_one <- function(Seurat_Object,
   ### GSEA
   #
   
-  ### signature preparation
-  # signat <- pca_contb[,PC]
-  signat <- nrow(pca_contb):1
-  names(signat) <- rownames(pca_contb)
-  
   ### db preparation
   # MSIGDB
   if(species[1] == "human") {
@@ -1128,11 +1123,16 @@ multiple_analyses_in_one <- function(Seurat_Object,
   }
   m_list <- m_df %>% split(x = .$gene_symbol, f = .$gs_name)
   
+  ### signature preparation
+  # signat <- pca_contb[,PC]
+  signat <- nrow(pca_contb):1
+  names(signat) <- rownames(pca_contb)
+  
   ### run GSEA
   GSEA_result <- run_gsea(gene_list = m_list, signature = list(signat), printPlot = FALSE)
   GSEA_result <- GSEA_result[order(GSEA_result$pval),]
   
-  ### only get pathways that have pval < 0.01 & size > 10 & up-regulating results (enriched with important) only
+  ### only get pathways that have pval < 0.001 & size > 30 & up-regulating results (enriched with important) only
   pathways <- GSEA_result$pathway[intersect(intersect(which(GSEA_result$pval < 1e-03),
                                                       which(GSEA_result$size > 30)),
                                             which(GSEA_result$NES > 2))]
@@ -1145,20 +1145,172 @@ multiple_analyses_in_one <- function(Seurat_Object,
   GSEA_result2 <- GSEA_result2[order(GSEA_result2$padj, GSEA_result2$pval),]
   
   ### write out the result file
-  write.xlsx2(GSEA_result2, file = paste0(result_dir2, PC, "_Genes_GSEA_Results_msigdb.xlsx",),
+  write.xlsx2(GSEA_result2, file = paste0(result_dir2, PC, "_Genes_GSEA_Results_msigdb.xlsx"),
               sheetName = "GSEA_Result", row.names = FALSE)
   
   ### same analyses with the given comparison
   if(!is.null(PC_Val)) {
-    
-    ### set two groups
-    grp1 <- 
-    
-    
+    ### check rownames in pca map and meta.data and colnames in raw counts are the same
+    if(identical(rownames(pca_map),
+                 rownames(local_Seurat_Obj@meta.data)) && identical(rownames(local_Seurat_Obj@meta.data),
+                                                                    colnames(local_Seurat_Obj@assays$RNA@counts))) {
       
+      ### set two groups
+      grp1_idx <- which(pca_map[,PC] >= PC_Val)
+      grp2_idx <- which(pca_map[,PC] < PC_Val)
+      
+      ### set group info to the meta data
+      local_Seurat_Obj@meta.data$PC_Group <- NA
+      local_Seurat_Obj@meta.data$PC_Group[grp1_idx] <- "grp1"
+      local_Seurat_Obj@meta.data$PC_Group[grp2_idx] <- "grp2"
+      
+      ### set the ident of the object with the group info
+      local_Seurat_Obj <- SetIdent(object = local_Seurat_Obj,
+                                   cells = rownames(local_Seurat_Obj@meta.data),
+                                   value = local_Seurat_Obj@meta.data$PC_Group)
+      
+      ### get DE genes between two groups
+      de_result <- FindMarkers(object = local_Seurat_Obj, test.use = "DESeq2",
+                               ident.1 = "grp1", ident.2 = "grp2",
+                               logfc.threshold = 0, min.pct = 0.1)
+      
+      ### new directory for DE
+      result_dir2 <- paste0(result_dir, "PC_Comparison/")
+      dir.create(result_dir2, showWarnings = FALSE, recursive = TRUE)
+      
+      ### write out the DE result
+      write.xlsx2(data.frame(Gene_Symbol=rownames(de_result),
+                             de_result,
+                             stringsAsFactors = FALSE, check.names = FALSE),
+                  file = paste0(result_dir2, "DE_Result_", PC, "_", PC_Val, ".xlsx"),
+                  sheetName = "DE_Result",
+                  row.names = FALSE)
+      
+      ### at least there are 10 DE genes for the further analyses
+      if(length(which(de_result$p_val_adj < 0.01)) > 10) {
+        ### get important DE genes
+        de_genes <- rownames(de_result)[which(de_result$p_val_adj < 0.01)]
+        up_de_genes <- rownames(de_result)[intersect(which(de_result$p_val_adj < 0.01),
+                                                     which(de_result$avg_logFC > 0))]
+        down_de_genes <- rownames(de_result)[intersect(which(de_result$p_val_adj < 0.01),
+                                                       which(de_result$avg_logFC < 0))]
+        
+        ### heatmap
+        ### set colside colors
+        uniqueV <- unique(local_Seurat_Obj@meta.data[,target_col])
+        colors <- colorRampPalette(brewer.pal(9,"Blues"))(length(uniqueV))
+        names(colors) <- uniqueV
+        
+        ### get a matrix for the heatmap
+        heatmap_mat <- data.frame(local_Seurat_Obj@assays$RNA@counts[de_genes,], check.names = FALSE)
+        
+        ### scale the data
+        heatmap_mat_scaled <- scale_h(heatmap_mat, type = "row")
+        
+        ### because there are some outliers in positive values
+        ### we set the maximum as abs(minimum)
+        heatmap_mat_scaled[which(heatmap_mat_scaled > abs(min(heatmap_mat_scaled)))] <- abs(min(heatmap_mat_scaled))
+        
+        ### heatmap
+        png(paste0(result_dir2, PC, "_", PC_Val, "Comparison_Heatmap.png"), width = 2000, height = 1000)
+        par(oma=c(0,0,2,6))
+        heatmap.3(as.matrix(heatmap_mat_scaled), main = paste0(PC, "_Genes_Heatmap_(",
+                                                               nrow(heatmap_mat_scaled), " Genes x ",
+                                                               ncol(heatmap_mat_scaled), " Cells)"),
+                  xlab = "", ylab = "", col=greenred(300),
+                  scale="none", key=T, keysize=0.8, density.info="density",
+                  dendrogram = "none", trace = "none",
+                  labRow = rownames(heatmap_mat_scaled), labCol = FALSE,
+                  Rowv = TRUE, Colv = FALSE,
+                  distfun=dist.spear, hclustfun=hclust.ave,
+                  ColSideColors = cbind(colors[as.character(local_Seurat_Obj@meta.data[,target_col])]),
+                  cexRow = 2, cexCol = 2, na.rm = TRUE)
+        legend("left", inset = 0, xpd = TRUE, title = "Time", legend = names(colors), fill = colors, cex = 2, box.lty = 0)
+        dev.off()
+        
+        ### pathway analysis
+        if(species[1] == "human") {
+          pathway_result_GO <- pathwayAnalysis_CP(geneList = mapIds(org.Hs.eg.db,
+                                                                    de_genes,
+                                                                    "ENTREZID", "SYMBOL"),
+                                                  org = species[1], database = "GO",
+                                                  title = paste0(PC, "_", PC_Val, "_Pathway_Results_with_", length(de_genes), "_DE_genes"),
+                                                  displayNum = 50, imgPrint = TRUE,
+                                                  dir = paste0(result_dir2))
+          pathway_result_KEGG <- pathwayAnalysis_CP(geneList = mapIds(org.Hs.eg.db,
+                                                                      de_genes,
+                                                                      "ENTREZID", "SYMBOL"),
+                                                    org = species[1], database = "KEGG",
+                                                    title = paste0(PC, "_", PC_Val, "_Pathway_Results_with_", length(de_genes), "_DE_genes"),
+                                                    displayNum = 50, imgPrint = TRUE,
+                                                    dir = paste0(result_dir2))
+        } else if(species[1] == "mouse") {
+          pathway_result_GO <- pathwayAnalysis_CP(geneList = mapIds(org.Mm.eg.db,
+                                                                    de_genes,
+                                                                    "ENTREZID", "SYMBOL"),
+                                                  org = species[1], database = "GO",
+                                                  title = paste0(PC, "_", PC_Val, "_Pathway_Results_with_", length(de_genes), "_DE_genes"),
+                                                  displayNum = 50, imgPrint = TRUE,
+                                                  dir = paste0(result_dir2))
+          pathway_result_KEGG <- pathwayAnalysis_CP(geneList = mapIds(org.Mm.eg.db,
+                                                                      de_genes,
+                                                                      "ENTREZID", "SYMBOL"),
+                                                    org = species[1], database = "KEGG",
+                                                    title = paste0(PC, "_", PC_Val, "_Pathway_Results_with_", length(de_genes), "_DE_genes"),
+                                                    displayNum = 50, imgPrint = TRUE,
+                                                    dir = paste0(result_dir2))
+        }
+        write.xlsx2(pathway_result_GO, file = paste0(result_dir2, PC, "_", PC_Val, "_GO_Pathway_Results_with_", length(de_genes), "_DE_genes.xlsx"),
+                    row.names = FALSE, sheetName = paste0("GO_Results"))
+        write.xlsx2(pathway_result_KEGG, file = paste0(result_dir2, PC, "_", PC_Val, "_KEGG_Pathway_Results_with_", length(de_genes), "_DE_genes.xlsx"),
+                    row.names = FALSE, sheetName = paste0("KEGG_Results"))
+        
+        ### GSEA
+        ### signature preparation
+        signat <- de_result$avg_logFC
+        names(signat) <- rownames(de_result)
+        
+        ### run GSEA
+        GSEA_result <- run_gsea(gene_list = m_list, signature = list(signat), printPlot = FALSE)
+        GSEA_result <- GSEA_result[order(GSEA_result$pval),]
+        
+        ### only get pathways that have pval < 0.001 & size > 30 & up-regulating results (enriched with important) only
+        pathways <- GSEA_result$pathway[intersect(intersect(which(GSEA_result$pval < 1e-03),
+                                                            which(GSEA_result$size > 30)),
+                                                  which(abs(GSEA_result$NES) > 1.6))]
+        
+        ### run GSEA again with the significant result - plot printing
+        result_dir2 <- paste0(result_dir2, "GSEA/")
+        dir.create(result_dir2, showWarnings = FALSE, recursive = TRUE)
+        GSEA_result2 <- run_gsea(gene_list = m_list[pathways], signature = list(signat),
+                                 printPlot = TRUE, printPath = result_dir2)
+        GSEA_result2 <- GSEA_result2[order(GSEA_result2$padj, GSEA_result2$pval),]
+        
+        ### write out the result file
+        write.xlsx2(GSEA_result2, file = paste0(result_dir2, PC, "_", PC_Val, "_DE_Genes_GSEA_Results_msigdb.xlsx"),
+                    sheetName = "GSEA_Result", row.names = FALSE)
+      }
+      
+    } else {
+      stop("ERROR: multiple_analyses_in_one() - unidentical row or col names.")
+    }
   }
   
 }
+
+### MPP2 - PC1
+multiple_analyses_in_one(Seurat_Object = Combined_Seurat_Obj,
+                         target_ident = "MPP2",
+                         target_col = "Development",
+                         target_col_factor_level = time_points,
+                         species = "mouse",
+                         PC = "PC_1",
+                         PC_Val = -20,
+                         important_thresh = 0.1,
+                         garbage_thresh = 1e-04,
+                         result_dir = "./results/Additional/MPP2/")
+
+
 
 
 
