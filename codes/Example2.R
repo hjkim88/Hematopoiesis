@@ -25,6 +25,12 @@ if(!require(xlsx, quietly = TRUE)) {
   install.packages("xlsx")
   require(xlsx, quietly = TRUE)
 }
+if(!require(org.Mm.eg.db, quietly = TRUE)) {
+  if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+  BiocManager::install("org.Mm.eg.db")
+  require(org.Mm.eg.db, quietly = TRUE)
+}
 
 ### set parameters
 Robj_path <- "./data/Combined_Seurat_Obj.RDATA"
@@ -554,6 +560,141 @@ scale_h <- function(data, type, na.rm=TRUE) {
 dist.spear <- function(x) as.dist(1-cor(t(x), method = "spearman"))
 hclust.ave <- function(x) hclust(x, method="average")
 
+# ******************************************************************************************
+# Pathway Analysis with clusterProfiler package
+# Input: geneList     = a vector of gene Entrez IDs for pathway analysis [numeric or character]
+#        org          = organism that will be used in the analysis ["human" or "mouse"]
+#                       should be either "human" or "mouse"
+#        database     = pathway analysis database (KEGG or GO) ["KEGG" or "GO"]
+#        title        = title of the pathway figure [character]
+#        pv_threshold = pathway analysis p-value threshold (not DE analysis threshold) [numeric]
+#        displayNum   = the number of pathways that will be displayed [numeric]
+#                       (If there are many significant pathways show the few top pathways)
+#        imgPrint     = print a plot of pathway analysis [TRUE/FALSE]
+#        dir          = file directory path of the output pathway figure [character]
+#
+# Output: Pathway analysis results in figure - using KEGG and GO pathways
+#         The x-axis represents the number of DE genes in the pathway
+#         The y-axis represents pathway names
+#         The color of a bar indicates adjusted p-value from the pathway analysis
+#         For Pathview Result, all colored genes are found DE genes in the pathway,
+#         and the color indicates log2(fold change) of the DE gene from DE analysis
+# ******************************************************************************************
+pathwayAnalysis_CP <- function(geneList,
+                               org,
+                               database,
+                               title="Pathway_Results",
+                               pv_threshold=0.05,
+                               displayNum=Inf,
+                               imgPrint=TRUE,
+                               dir="./") {
+  
+  ### load library
+  if(!require(clusterProfiler, quietly = TRUE)) {
+    if (!requireNamespace("BiocManager", quietly = TRUE))
+      install.packages("BiocManager")
+    BiocManager::install("clusterProfiler")
+    require(clusterProfiler, quietly = TRUE)
+  }
+  if(!require(ggplot2)) {
+    install.packages("ggplot2")
+    library(ggplot2)
+  }
+  
+  
+  ### collect gene list (Entrez IDs)
+  geneList <- geneList[which(!is.na(geneList))]
+  
+  if(!is.null(geneList)) {
+    ### make an empty list
+    p <- list()
+    
+    if(database == "KEGG") {
+      ### KEGG Pathway
+      kegg_enrich <- enrichKEGG(gene = geneList, organism = org, pvalueCutoff = pv_threshold)
+      
+      if(is.null(kegg_enrich)) {
+        writeLines("KEGG Result does not exist")
+        return(NULL)
+      } else {
+        kegg_enrich@result <- kegg_enrich@result[which(kegg_enrich@result$p.adjust < pv_threshold),]
+        
+        if(imgPrint == TRUE) {
+          if((displayNum == Inf) || (nrow(kegg_enrich@result) <= displayNum)) {
+            result <- kegg_enrich@result
+            description <- kegg_enrich@result$Description
+          } else {
+            result <- kegg_enrich@result[1:displayNum,]
+            description <- kegg_enrich@result$Description[1:displayNum]
+          }
+          
+          if(nrow(kegg_enrich) > 0) {
+            p[[1]] <- ggplot(result, aes(x=Description, y=Count)) + labs(x="", y="Gene Counts") + 
+              theme_classic(base_size = 16) + geom_bar(aes(fill = p.adjust), stat="identity") + coord_flip() +
+              scale_x_discrete(limits = rev(description)) +
+              guides(fill = guide_colorbar(ticks=FALSE, title="P.Val", barheight=10)) +
+              ggtitle(paste0("KEGG ", title))
+            
+            png(paste0(dir, "kegg_", title, "_CB.png"), width = 2000, height = 1000)
+            print(p[[1]])
+            dev.off()
+          } else {
+            writeLines("KEGG Result does not exist")
+          }
+        }
+        
+        return(kegg_enrich@result)
+      }
+    } else if(database == "GO") {
+      ### GO Pathway
+      if(org == "human") {
+        go_enrich <- enrichGO(gene = geneList, OrgDb = 'org.Hs.eg.db', readable = T, ont = "BP", pvalueCutoff = pv_threshold)
+      } else if(org == "mouse") {
+        go_enrich <- enrichGO(gene = geneList, OrgDb = 'org.Mm.eg.db', readable = T, ont = "BP", pvalueCutoff = pv_threshold)
+      } else {
+        go_enrich <- NULL
+        writeLines(paste("Unknown org variable:", org))
+      }
+      
+      if(is.null(go_enrich)) {
+        writeLines("GO Result does not exist")
+        return(NULL)
+      } else {
+        go_enrich@result <- go_enrich@result[which(go_enrich@result$p.adjust < pv_threshold),]
+        
+        if(imgPrint == TRUE) {
+          if((displayNum == Inf) || (nrow(go_enrich@result) <= displayNum)) {
+            result <- go_enrich@result
+            description <- go_enrich@result$Description
+          } else {
+            result <- go_enrich@result[1:displayNum,]
+            description <- go_enrich@result$Description[1:displayNum]
+          }
+          
+          if(nrow(go_enrich) > 0) {
+            p[[2]] <- ggplot(result, aes(x=Description, y=Count)) + labs(x="", y="Gene Counts") + 
+              theme_classic(base_size = 16) + geom_bar(aes(fill = p.adjust), stat="identity") + coord_flip() +
+              scale_x_discrete(limits = rev(description)) +
+              guides(fill = guide_colorbar(ticks=FALSE, title="P.Val", barheight=10)) +
+              ggtitle(paste0("GO ", title))
+            
+            png(paste0(dir, "go_", title, "_CB.png"), width = 2000, height = 1000)
+            print(p[[2]])
+            dev.off()
+          } else {
+            writeLines("GO Result does not exist")
+          }
+        }
+        
+        return(go_enrich@result)
+      }
+    } else {
+      stop("database prameter should be \"GO\" or \"KEGG\"")
+    }
+  } else {
+    writeLines("geneList = NULL")
+  }
+}
 
 #
 ### GSEA with the important genes of the PC1
@@ -795,6 +936,7 @@ run_gsea <- function(gene_list,
 ### target ident: the ident that will be analyzed, if NULL, just use the given object without split
 ### target_col: a column name of the meta data of the seurat object that will be used in
 ###             the pseudotime analysis and in creating heatmaps. Usually a time-associated column
+### target_col_factor_level: a factor level of the 'target_col'
 ### PC: the principle component that will be analysed, default: PC1
 ### PC_Val: the value of the given pc that will be used as a cutoff
 ###         the comparison will be made based on this value
@@ -804,6 +946,7 @@ run_gsea <- function(gene_list,
 multiple_analyses_in_one <- function(Seurat_Object,
                                      target_ident=NULL,
                                      target_col,
+                                     target_col_factor_level,
                                      species=c("human", "mouse"),
                                      PC="PC_1",
                                      PC_Val=NULL,
@@ -827,7 +970,8 @@ multiple_analyses_in_one <- function(Seurat_Object,
   }
   
   ### order the meta data by developmental time
-  local_Seurat_Obj@meta.data <- local_Seurat_Obj@meta.data[order(local_Seurat_Obj@meta.data[,target_col]),]
+  local_Seurat_Obj@meta.data <- local_Seurat_Obj@meta.data[order(factor(local_Seurat_Obj@meta.data[,target_col],
+                                                                        levels = target_col_factor_level)),]
   
   ### rownames in the meta.data should be in the same order as colnames in the counts
   local_Seurat_Obj@assays$RNA@counts <- local_Seurat_Obj@assays$RNA@counts[,rownames(local_Seurat_Obj@meta.data)]
@@ -931,7 +1075,20 @@ multiple_analyses_in_one <- function(Seurat_Object,
   
   ### pathway analysis with the important genes of the given PC
   if(species[1] == "human") {
-    
+    pathway_result_GO <- pathwayAnalysis_CP(geneList = mapIds(org.Hs.eg.db,
+                                                              important_genes,
+                                                              "ENTREZID", "SYMBOL"),
+                                            org = species[1], database = "GO",
+                                            title = paste0(PC, "_Pathway_Results_with_", length(important_genes), "_important_genes_", important_thresh),
+                                            displayNum = 50, imgPrint = TRUE,
+                                            dir = paste0(result_dir))
+    pathway_result_KEGG <- pathwayAnalysis_CP(geneList = mapIds(org.Hs.eg.db,
+                                                                important_genes,
+                                                                "ENTREZID", "SYMBOL"),
+                                              org = species[1], database = "KEGG",
+                                              title = paste0(PC, "_Pathway_Results_with_", length(important_genes), "_important_genes_", important_thresh),
+                                              displayNum = 50, imgPrint = TRUE,
+                                              dir = paste0(result_dir))
   } else if(species[1] == "mouse") {
     pathway_result_GO <- pathwayAnalysis_CP(geneList = mapIds(org.Mm.eg.db,
                                                               important_genes,
@@ -958,7 +1115,8 @@ multiple_analyses_in_one <- function(Seurat_Object,
   #
   
   ### signature preparation
-  signat <- pca_contb[,PC]
+  # signat <- pca_contb[,PC]
+  signat <- nrow(pca_contb):1
   names(signat) <- rownames(pca_contb)
   
   ### db preparation
@@ -974,9 +1132,10 @@ multiple_analyses_in_one <- function(Seurat_Object,
   GSEA_result <- run_gsea(gene_list = m_list, signature = list(signat), printPlot = FALSE)
   GSEA_result <- GSEA_result[order(GSEA_result$pval),]
   
-  ### only get pathways that have pval < 0.05 & size > 10
-  pathways <- GSEA_result$pathway[intersect(which(GSEA_result$pval < 0.05),
-                                            which(GSEA_result$size > 10))]
+  ### only get pathways that have pval < 0.01 & size > 10 & up-regulating results (enriched with important) only
+  pathways <- GSEA_result$pathway[intersect(intersect(which(GSEA_result$pval < 1e-03),
+                                                      which(GSEA_result$size > 30)),
+                                            which(GSEA_result$NES > 2))]
   
   ### run GSEA again with the significant result - plot printing
   result_dir2 <- paste0(result_dir, "GSEA/")
@@ -990,9 +1149,14 @@ multiple_analyses_in_one <- function(Seurat_Object,
               sheetName = "GSEA_Result", row.names = FALSE)
   
   ### same analyses with the given comparison
-  
-  
-  
+  if(!is.null(PC_Val)) {
+    
+    ### set two groups
+    grp1 <- 
+    
+    
+      
+  }
   
 }
 
