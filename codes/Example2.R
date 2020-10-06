@@ -1136,6 +1136,16 @@ multiple_analyses_in_one <- function(Seurat_Object,
   pathways <- GSEA_result$pathway[intersect(intersect(which(GSEA_result$pval < 1e-03),
                                                       which(GSEA_result$size > 30)),
                                             which(GSEA_result$NES > 2))]
+  if(length(pathways) < 5) {
+    pathways <- GSEA_result$pathway[intersect(intersect(which(GSEA_result$pval < 1e-03),
+                                                        which(GSEA_result$size > 30)),
+                                              which(GSEA_result$NES > 1.8))]
+  }
+  if(length(pathways) < 5) {
+    pathways <- GSEA_result$pathway[intersect(intersect(which(GSEA_result$pval < 1e-03),
+                                                        which(GSEA_result$size > 30)),
+                                              which(GSEA_result$NES > 1.6))]
+  }
   
   ### run GSEA again with the significant result - plot printing
   result_dir2 <- paste0(result_dir, "GSEA/")
@@ -1175,7 +1185,7 @@ multiple_analyses_in_one <- function(Seurat_Object,
                                logfc.threshold = 0, min.pct = 0.1)
       
       ### new directory for DE
-      result_dir2 <- paste0(result_dir, "PC_Comparison/")
+      result_dir2 <- paste0(result_dir, "PC_Comparison/", PC, "_", PC_Val, "/")
       dir.create(result_dir2, showWarnings = FALSE, recursive = TRUE)
       
       ### write out the DE result
@@ -1277,7 +1287,18 @@ multiple_analyses_in_one <- function(Seurat_Object,
         ### only get pathways that have pval < 0.001 & size > 30 & up-regulating results (enriched with important) only
         pathways <- GSEA_result$pathway[intersect(intersect(which(GSEA_result$pval < 1e-03),
                                                             which(GSEA_result$size > 30)),
-                                                  which(abs(GSEA_result$NES) > 1.6))]
+                                                  which(abs(GSEA_result$NES) > 2))]
+        
+        if(length(pathways) < 5) {
+          pathways <- GSEA_result$pathway[intersect(intersect(which(GSEA_result$pval < 1e-03),
+                                                              which(GSEA_result$size > 30)),
+                                                    which(GSEA_result$NES > 1.8))]
+        }
+        if(length(pathways) < 5) {
+          pathways <- GSEA_result$pathway[intersect(intersect(which(GSEA_result$pval < 1e-03),
+                                                              which(GSEA_result$size > 30)),
+                                                    which(GSEA_result$NES > 1.6))]
+        }
         
         ### run GSEA again with the significant result - plot printing
         result_dir2 <- paste0(result_dir2, "GSEA/")
@@ -1298,6 +1319,66 @@ multiple_analyses_in_one <- function(Seurat_Object,
   
 }
 
+### LTHSC - PC1
+multiple_analyses_in_one(Seurat_Object = Combined_Seurat_Obj,
+                         target_ident = "LTHSC",
+                         target_col = "Development",
+                         target_col_factor_level = time_points,
+                         species = "mouse",
+                         PC = "PC_1",
+                         PC_Val = -30,
+                         important_thresh = 0.1,
+                         garbage_thresh = 1e-04,
+                         result_dir = "./results/Additional/LTHSC/PC1/")
+
+### LTHSC - PC2
+multiple_analyses_in_one(Seurat_Object = Combined_Seurat_Obj,
+                         target_ident = "LTHSC",
+                         target_col = "Development",
+                         target_col_factor_level = time_points,
+                         species = "mouse",
+                         PC = "PC_2",
+                         PC_Val = 20,
+                         important_thresh = 0.1,
+                         garbage_thresh = 1e-04,
+                         result_dir = "./results/Additional/LTHSC/PC2/")
+
+### LTHSC - PC3
+multiple_analyses_in_one(Seurat_Object = Combined_Seurat_Obj,
+                         target_ident = "LTHSC",
+                         target_col = "Development",
+                         target_col_factor_level = time_points,
+                         species = "mouse",
+                         PC = "PC_3",
+                         PC_Val = -5,
+                         important_thresh = 0.1,
+                         garbage_thresh = 1e-04,
+                         result_dir = "./results/Additional/LTHSC/PC3/")
+
+### LTHSC - PC4
+multiple_analyses_in_one(Seurat_Object = Combined_Seurat_Obj,
+                         target_ident = "LTHSC",
+                         target_col = "Development",
+                         target_col_factor_level = time_points,
+                         species = "mouse",
+                         PC = "PC_4",
+                         PC_Val = -5,
+                         important_thresh = 0.1,
+                         garbage_thresh = 1e-04,
+                         result_dir = "./results/Additional/LTHSC/PC4/")
+
+### LTHSC - PC5
+multiple_analyses_in_one(Seurat_Object = Combined_Seurat_Obj,
+                         target_ident = "LTHSC",
+                         target_col = "Development",
+                         target_col_factor_level = time_points,
+                         species = "mouse",
+                         PC = "PC_5",
+                         PC_Val = NULL,
+                         important_thresh = 0.1,
+                         garbage_thresh = 1e-04,
+                         result_dir = "./results/Additional/LTHSC/PC5/")
+
 ### MPP2 - PC1
 multiple_analyses_in_one(Seurat_Object = Combined_Seurat_Obj,
                          target_ident = "MPP2",
@@ -1305,198 +1386,362 @@ multiple_analyses_in_one(Seurat_Object = Combined_Seurat_Obj,
                          target_col_factor_level = time_points,
                          species = "mouse",
                          PC = "PC_1",
-                         PC_Val = -20,
+                         PC_Val = NULL,
                          important_thresh = 0.1,
                          garbage_thresh = 1e-04,
-                         result_dir = "./results/Additional/MPP2/")
+                         result_dir = "./results/Additional/MPP2/PC1/")
 
+### MPP2 - PC2
+multiple_analyses_in_one(Seurat_Object = Combined_Seurat_Obj,
+                         target_ident = "MPP2",
+                         target_col = "Development",
+                         target_col_factor_level = time_points,
+                         species = "mouse",
+                         PC = "PC_2",
+                         PC_Val = -10,
+                         important_thresh = 0.1,
+                         garbage_thresh = 1e-04,
+                         result_dir = "./results/Additional/MPP2/PC2/")
 
+### MPP2 - PC3
+multiple_analyses_in_one(Seurat_Object = Combined_Seurat_Obj,
+                         target_ident = "MPP2",
+                         target_col = "Development",
+                         target_col_factor_level = time_points,
+                         species = "mouse",
+                         PC = "PC_3",
+                         PC_Val = -10,
+                         important_thresh = 0.1,
+                         garbage_thresh = 1e-04,
+                         result_dir = "./results/Additional/MPP2/PC3/")
 
+### MPP2 - PC4
+multiple_analyses_in_one(Seurat_Object = Combined_Seurat_Obj,
+                         target_ident = "MPP2",
+                         target_col = "Development",
+                         target_col_factor_level = time_points,
+                         species = "mouse",
+                         PC = "PC_4",
+                         PC_Val = NULL,
+                         important_thresh = 0.1,
+                         garbage_thresh = 1e-04,
+                         result_dir = "./results/Additional/MPP2/PC4/")
 
+### MPP2 - PC5
+multiple_analyses_in_one(Seurat_Object = Combined_Seurat_Obj,
+                         target_ident = "MPP2",
+                         target_col = "Development",
+                         target_col_factor_level = time_points,
+                         species = "mouse",
+                         PC = "PC_5",
+                         PC_Val = 15,
+                         important_thresh = 0.1,
+                         garbage_thresh = 1e-04,
+                         result_dir = "./results/Additional/MPP2/PC5/")
 
-### choose cell type
 #
-### MPP2
+### RNA-Magnet
 #
-type <- "MPP2"
 
-### new output directory
-outputDir2 <- paste0(outputDir, type, "/")
-dir.create(outputDir2, showWarnings = FALSE, recursive = TRUE)
+### load libraries
+if(!require(RNAMagnet, quietly = TRUE)) {
+  remotes::install_github("veltenlab/rnamagnet")
+  require(RNAMagnet, quietly = TRUE)
+}
+if(!require(reticulate, quietly = TRUE)) {
+  install.packages("reticulate")
+  require(reticulate, quietly = TRUE)
+}
+if(!require(Rmagic, quietly = TRUE)) {
+  install.packages("Rmagic")
+  require(Rmagic, quietly = TRUE)
+}
+if(!require(scales, quietly = TRUE)) {
+  install.packages("scales")
+  library(scales, quietly = TRUE)
+}
 
-### split the Seurat obj based on HSPC info
-Seurat_Obj <- subset(Combined_Seurat_Obj, idents=type)
+### see python environment since RNAMagnet uses the python module 'magic'
+# conda_create("r-reticulate")
+# conda_install("r-reticulate", "python-magic")
+use_condaenv("r-reticulate")
+py_config()
+py_module_available("magic")
 
-### order the meta data by developmental time
-Seurat_Obj@meta.data <- Seurat_Obj@meta.data[order(factor(Seurat_Obj@meta.data$Development,
-                                                          levels = time_points)),]
+### set parameters
+Robj_path <- "./data/Combined_BM_Seurat_Obj.RDATA"
+
+### load the Seurat object and save the object name
+tmp_env <- new.env()
+load(paste0(Robj_path), tmp_env)
+obj_name <- ls(tmp_env)
+assign("Combined_BM_Seurat_Obj", get(obj_name, envir = tmp_env))
+rm(tmp_env)
+gc()
+
+### check whether the orders are the same
+print(identical(names(Idents(object = Combined_BM_Seurat_Obj)), rownames(Combined_BM_Seurat_Obj@meta.data)))
+
+### set the ident of the object with the group info
+Combined_BM_Seurat_Obj <- SetIdent(object = Combined_BM_Seurat_Obj,
+                                   cells = rownames(Combined_BM_Seurat_Obj@meta.data),
+                                   value = Combined_BM_Seurat_Obj@meta.data$Cell_Type)
+
+### split the Seurat obj based on the given info
+Combined_Stroma_Seurat_Obj <- subset(Combined_BM_Seurat_Obj, idents="Stroma")
+
+### check whether the orders are the same
+print(identical(names(Idents(object = Combined_Stroma_Seurat_Obj)), rownames(Combined_Stroma_Seurat_Obj@meta.data)))
 
 ### rownames in the meta.data should be in the same order as colnames in the counts
-Seurat_Obj@assays$RNA@counts <- Seurat_Obj@assays$RNA@counts[,rownames(Seurat_Obj@meta.data)]
+Combined_Stroma_Seurat_Obj@meta.data <- Combined_Stroma_Seurat_Obj@meta.data[colnames(Combined_Stroma_Seurat_Obj@assays$RNA@counts),]
 
-### run PCA
-Seurat_Obj <- RunPCA(Seurat_Obj, npcs = 10)
-pca_map <- Embeddings(Seurat_Obj, reduction = "pca")[rownames(Seurat_Obj@meta.data),1:10]
+### active assay = "RNA"
+Combined_Stroma_Seurat_Obj@active.assay <- "RNA"
 
+### remove BM Seurat object
+rm(Combined_BM_Seurat_Obj)
+gc()
 
-### find feature contributions of the PC1 
-pca_cos2 <- Seurat_Obj@reductions$pca@feature.loadings * Seurat_Obj@reductions$pca@feature.loadings
-pca_contb <- pca_cos2
-for(i in 1:ncol(pca_contb)) {
-  s <- sum(pca_cos2[,i])
-  for(j in 1:nrow(pca_contb)) {
-    pca_contb[j,i] <- pca_cos2[j,i] * 100 / s
+### combine stroma data to the splited Heme Seurat object
+Combined_Stroma_Seurat_Obj@meta.data <- Combined_Stroma_Seurat_Obj@meta.data[,-which(colnames(Combined_Stroma_Seurat_Obj@meta.data) == "Cell_Type")]
+Combined_Stroma_Seurat_Obj@meta.data$HSPC <- "Stroma"
+Combined_Total_Seurat_Obj <- merge(Combined_Seurat_Obj, Combined_Stroma_Seurat_Obj)
+
+### remove unnecessary objects
+rm(Combined_Seurat_Obj)
+rm(Combined_Stroma_Seurat_Obj)
+gc()
+
+### check whether the orders are the same
+print(identical(names(Idents(object = Combined_Total_Seurat_Obj)), rownames(Combined_Total_Seurat_Obj@meta.data)))
+
+### rownames in the meta.data should be in the same order as colnames in the counts
+Combined_Total_Seurat_Obj@meta.data <- Combined_Total_Seurat_Obj@meta.data[colnames(Combined_Total_Seurat_Obj@assays$RNA@counts),]
+
+### a function for color brewer
+cell_pal <- function(cell_vars, pal_fun) {
+  if (is.numeric(cell_vars)) {
+    pal <- pal_fun(100)
+    return(pal[cut(cell_vars, breaks = 100)])
+  } else {
+    categories <- sort(unique(cell_vars))
+    pal <- setNames(pal_fun(length(categories)), categories)
+    return(pal[cell_vars])
   }
 }
-pca_contb <- pca_contb[order(-pca_contb[,"PC_1"]),]
 
-### PC1 density plot
-plot(density(pca_contb[,"PC_1"]))
-
-### get genes that contributed to the PC1 the most
-contb_threshold <- 0.1
-important_genes <- rownames(pca_contb)[which(pca_contb[,"PC_1"] > contb_threshold)]
-
-### get genes that contributed to the PC1 the least
-garbage_threshold <- 1e-04
-garbage_genes <- rownames(pca_contb)[which(pca_contb[,"PC_1"] < garbage_threshold)]
-
-
-#
-### a heatmap with the important genes - 322 genes x 428 cells
-#
-
-### get a matrix for the heatmap
-heatmap_mat <- data.frame(Seurat_Obj@assays$RNA@counts[important_genes,], check.names = FALSE)
-
-### scale the data
-heatmap_mat_scaled <- scale_h(heatmap_mat, type = "row")
-
-### see the distribution of the gene expressions
-# plot(density(heatmap_mat_scaled))
-
-### because there are some outliers in positive values
-### we set the maximum as abs(minimum)
-heatmap_mat_scaled[which(heatmap_mat_scaled > abs(min(heatmap_mat_scaled)))] <- abs(min(heatmap_mat_scaled))
-
-### set colside colors
-uniqueV <- unique(Seurat_Obj@meta.data$Development)
-colors <- colorRampPalette(brewer.pal(9,"Blues"))(length(uniqueV))
-names(colors) <- uniqueV
-
-### heatmap
-png(paste0(outputDir2, "PC1_Genes_Heatmap.png"), width = 2000, height = 1000)
-par(oma=c(0,0,2,6))
-heatmap.3(as.matrix(heatmap_mat_scaled), main = paste0("PC1_Genes_Heatmap_(",
-                                                       nrow(heatmap_mat_scaled), " Genes x ",
-                                                       ncol(heatmap_mat_scaled), " Cells)"),
-          xlab = "", ylab = "", col=greenred(300),
-          scale="none", key=T, keysize=0.8, density.info="density",
-          dendrogram = "none", trace = "none",
-          labRow = rownames(heatmap_mat_scaled), labCol = FALSE,
-          Rowv = TRUE, Colv = FALSE,
-          distfun=dist.spear, hclustfun=hclust.ave,
-          ColSideColors = cbind(colors[as.character(Seurat_Obj@meta.data$Development)]),
-          cexRow = 2, cexCol = 2, na.rm = TRUE)
-legend("left", inset = 0, xpd = TRUE, title = "Time", legend = names(colors), fill = colors, cex = 2, box.lty = 0)
-dev.off()
-
-
-#
-### a heatmap with the garbage genes - 167 genes x 428 cells
-#
-
-### get a matrix for the heatmap
-heatmap_mat <- data.frame(Seurat_Obj@assays$RNA@counts[garbage_genes,], check.names = FALSE)
-
-### scale the data
-heatmap_mat_scaled <- scale_h(heatmap_mat, type = "row")
-
-### see the distribution of the gene expressions
-# plot(density(heatmap_mat_scaled))
-
-### because there are some outliers in positive values
-### we set the maximum as abs(minimum)
-heatmap_mat_scaled[which(heatmap_mat_scaled > abs(min(heatmap_mat_scaled)))] <- abs(min(heatmap_mat_scaled))
-
-### set colside colors
-uniqueV <- unique(Seurat_Obj@meta.data$Development)
-colors <- colorRampPalette(brewer.pal(9,"Blues"))(length(uniqueV))
-names(colors) <- uniqueV
-
-### heatmap
-png(paste0(outputDir2, "PC1_Genes_Heatmap_GARBAGE.png"), width = 2000, height = 1000)
-par(oma=c(0,0,2,6))
-heatmap.3(as.matrix(heatmap_mat_scaled), main = paste0("PC1_Genes_Heatmap_(",
-                                                       nrow(heatmap_mat_scaled), " Genes x ",
-                                                       ncol(heatmap_mat_scaled), " Cells)"),
-          xlab = "", ylab = "", col=greenred(300),
-          scale="none", key=T, keysize=0.8, density.info="density",
-          dendrogram = "none", trace = "none",
-          labRow = rownames(heatmap_mat_scaled), labCol = FALSE,
-          Rowv = TRUE, Colv = FALSE,
-          distfun=dist.spear, hclustfun=hclust.ave,
-          ColSideColors = cbind(colors[as.character(Seurat_Obj@meta.data$Development)]),
-          cexRow = 2, cexCol = 2, na.rm = TRUE)
-legend("left", inset = 0, xpd = TRUE, title = "Time", legend = names(colors), fill = colors, cex = 2, box.lty = 0)
-dev.off()
-
-
-### pathway analysis with the important genes of the PC1
-contb_threshold <- 0.1
-important_genes <- rownames(pca_contb)[which(pca_contb[,"PC_1"] > contb_threshold)]
-pathway_result_GO <- pathwayAnalysis_CP(geneList = mapIds(org.Mm.eg.db,
-                                                          important_genes,
-                                                          "ENTREZID", "SYMBOL"),
-                                        org = "mouse", database = "GO",
-                                        title = paste0("Pathway_Results_", length(important_genes), "_PC1_Genes_", contb_threshold),
-                                        displayNum = 50, imgPrint = TRUE,
-                                        dir = paste0(outputDir2))
-pathway_result_KEGG <- pathwayAnalysis_CP(geneList = mapIds(org.Mm.eg.db,
-                                                            important_genes,
-                                                            "ENTREZID", "SYMBOL"),
-                                          org = "mouse", database = "KEGG",
-                                          title = paste0("Pathway_Results_", length(important_genes), "_PC1_Genes_", contb_threshold),
-                                          displayNum = 50, imgPrint = TRUE,
-                                          dir = paste0(outputDir2))
-write.xlsx2(pathway_result_GO, file = paste0(outputDir2, "GO_pathway_results_", length(important_genes), "_PC1_Genes_", contb_threshold, ".xlsx"),
-            row.names = FALSE, sheetName = paste0("GO_Results"))
-write.xlsx2(pathway_result_KEGG, file = paste0(outputDir2, "KEGG_pathway_results_", length(important_genes), "_PC1_Genes_", contb_threshold, ".xlsx"),
-            row.names = FALSE, sheetName = paste0("KEGG_Results"))
-
-
-#
-### msigdb pacakge + fgsea
-### signature: PC1 contribution
-#
-
-### signature preparation
-signat <- pca_contb[important_genes,"PC_1"]
-names(signat) <- important_genes
-
-### db preparation
-# MSIGDB
-m_df <- msigdbr(species = "Mus musculus")
-m_list <- m_df %>% split(x = .$gene_symbol, f = .$gs_name)
-
-### run GSEA
-GSEA_result <- run_gsea(gene_list = m_list, signature = list(signat), printPlot = FALSE)
-GSEA_result <- GSEA_result[order(GSEA_result$pval),]
-
-### only get pathways that have pval < 0.05
-pathways <- GSEA_result$pathway[intersect(which(GSEA_result$pval < 0.05),
-                                          which(GSEA_result$size > 10))]
-
-### run GSEA again with the significant result - plot printing
-GSEA_result2 <- run_gsea(gene_list = m_list[pathways], signature = list(signat),
-                         printPlot = TRUE, printPath = "./results/GSEA/")
-GSEA_result2 <- GSEA_result2[order(GSEA_result2$padj, GSEA_result2$pval),]
-
-### write out the result file
-write.xlsx2(GSEA_result2, file = paste0("./results/GSEA/MPP2_GSEA_msigdb_result.xlsx"),
-            sheetName = "GSEA_Result", row.names = FALSE)
-
-
-
+### merge specific Heme and Stroma and run RNA-Magnet
+merge_heme_stroma_and_run_rnamagnet <- function(Seurat_Object,
+                                                target_col,
+                                                comp1,
+                                                comp2,
+                                                time_point,
+                                                result_dir="./") {
+  
+  ### set output directory
+  result_dir <- paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                       "_RNAMagnet_Result/", time_point, "/")
+  dir.create(result_dir, showWarnings = FALSE, recursive = TRUE)
+  
+  ### set group info to the metadata
+  Seurat_Object@meta.data$Group <- paste0(Seurat_Object@meta.data[,target_col], "_", Seurat_Object@meta.data$Time)
+  
+  ### all the comps
+  comps <- union(paste0(comp1, "_", time_point), paste0(comp2, "_", time_point))
+  
+  ### set the ident of the object with the specified info
+  Seurat_Object <- SetIdent(object = Seurat_Object,
+                            cells = rownames(Seurat_Object@meta.data),
+                            value = Seurat_Object@meta.data$Group)
+  
+  ### only keep the specified cells
+  Seurat_Object <- subset(Seurat_Object, idents=comps)
+  
+  ### check whether the orders are the same
+  print(identical(names(Idents(object = Seurat_Object)), rownames(Seurat_Object@meta.data)))
+  
+  ### rownames in the meta.data should be in the same order as colnames in the counts
+  Seurat_Object@meta.data <- Seurat_Object@meta.data[colnames(Seurat_Object@assays$RNA@counts),]
+  
+  ### run PCA
+  Seurat_Object <- FindVariableFeatures(Seurat_Object)
+  Seurat_Object <- ScaleData(Seurat_Object)
+  Seurat_Object <- RunPCA(Seurat_Object, npcs = 15)
+  pca_map <- Embeddings(Seurat_Object, reduction = "pca")[rownames(Seurat_Object@meta.data),1:15]
+  
+  ### run RNAMagnet with anchors
+  result <- RNAMagnetAnchors(Seurat_Object,
+                             anchors = unique(Seurat_Object@meta.data$Group))
+  
+  ### write the result as an Excel file
+  write.xlsx2(data.frame(Cell=rownames(result), result,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                            "_RNAMagnet_Result_", time_point, ".xlsx"),
+              sheetName = paste0("RNAMagnet_Result"),
+              row.names = FALSE)
+  
+  ### add RNAMagnet info to the seurat object
+  Seurat_Object@meta.data$direction <- as.character(result[rownames(Seurat_Object@meta.data),"direction"])
+  Seurat_Object@meta.data$adhesiveness <- as.numeric(result[rownames(Seurat_Object@meta.data),"adhesiveness"])
+  Seurat_Object@meta.data$specificity <- as.numeric(sapply(rownames(Seurat_Object@meta.data), function(x) {
+    result[x, result[x,"direction"]]
+  }))
+  
+  ### check the order
+  print(identical(rownames(Seurat_Object@meta.data), rownames(pca_map)))
+  
+  ### make a data frame for ggplot
+  plot_df <- data.frame(X=pca_map[rownames(Seurat_Object@meta.data),"PC_1"],
+                        Y=pca_map[rownames(Seurat_Object@meta.data),"PC_2"],
+                        group_color = Seurat_Object@meta.data$direction,
+                        group_alpha = Seurat_Object@meta.data$adhesiveness,
+                        cluster_color = Seurat_Object@meta.data$Group,
+                        specificity = Seurat_Object@meta.data$specificity,
+                        stringsAsFactors = FALSE, check.names = FALSE)
+  
+  ### get colors for the clustering result
+  cell_colors_clust <- cell_pal(unique(Seurat_Object@meta.data$Group), hue_pal())
+  
+  ### draw a scatter plot with the adhesiveness info
+  ggplot(plot_df, aes_string(x="X", y="Y")) +
+    geom_point(aes_string(col="group_color", alpha="group_alpha"), size=2) +
+    xlab("PC1") + ylab("PC2") +
+    labs(col="Direction", alpha="Adhesiveness") +
+    ggtitle("PCA with Direction & Adhesiveness") +
+    theme_classic(base_size = 16) +
+    scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$group_color)[order(unique(plot_df$group_color))])],
+                       labels = names(cell_colors_clust[as.character(unique(plot_df$group_color)[order(unique(plot_df$group_color))])]))
+  ggsave(file = paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                                 "_RNAMagnet_Result_AD_", time_point, ".png"), width = 20, height = 12, dpi = 300)
+  
+  ### draw a scatter plot with the specificity info
+  ggplot(plot_df, aes_string(x="X", y="Y")) +
+    geom_point(aes_string(col="group_color", alpha="specificity"), size=2) +
+    xlab("PC1") + ylab("PC2") +
+    labs(col="Direction", alpha="Specificity Score") +
+    ggtitle("PCA with Direction & Specificity Score") +
+    theme_classic(base_size = 16) +
+    scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$group_color)[order(unique(plot_df$group_color))])],
+                       labels = names(cell_colors_clust[as.character(unique(plot_df$group_color)[order(unique(plot_df$group_color))])]))
+  ggsave(file = paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                                 "_RNAMagnet_Result_SP_", time_point, ".png"), width = 20, height = 12, dpi = 300)
+  
+  
+  ### run RNAMagnet signaling
+  result2 <- RNAMagnetSignaling(Seurat_Object)
+  
+  ### draw signaling network
+  png(paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+             "_Signaling_RNAMagnet_Network_", time_point, ".png"), width = 2400, height = 1200, res = 120)
+  set.seed(1234)
+  PlotSignalingNetwork(result2, threshold = 0.01,
+                       colors = cell_colors_clust,
+                       useLabels = TRUE,
+                       main = paste0("Signaling_RNAMagnet_", time_point))
+  legend("left",
+         title = "Clusters",
+         legend = names(cell_colors_clust),
+         fill = cell_colors_clust,
+         border = NA,
+         bty = "o",
+         x.intersp = 1,
+         y.intersp = 0.8,
+         cex = 1)
+  dev.off()
+  
+  ### get all the interaction list
+  interaction_list <- NULL
+  for(clust1 in names(cell_colors_clust)) {
+    for(clust2 in names(cell_colors_clust)) {
+      il <- getRNAMagnetGenes(result2, clust1, clust2, thresh = 0.05)
+      if(nrow(il) > 0) {
+        il$ligand_cluster <- clust1
+        il$receptor_cluster <- clust2
+        if(is.null(interaction_list)) {
+          interaction_list <- il
+        } else {
+          interaction_list <- rbind(interaction_list, il)
+        }
+      }
+    }
+  }
+  interaction_list <- cbind(interaction_list[3:4], interaction_list[1:2])
+  colnames(interaction_list) <- c("Ligand_Cluster", "Receptor_Cluster", "Interaction_Score", "Interaction_Pair")
+  
+  ### write out the interaction list
+  write.xlsx2(interaction_list,
+              file = paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                            "_Signaling_RNAMagnet_Interaction_List_", time_point, ".xlsx"),
+              sheetName = paste0("Signaling_RNAMagnet_Interaction_List"),
+              row.names = FALSE)
+  
+}
 
 
+### LTHSC vs Stroma - P0
+merge_heme_stroma_and_run_rnamagnet(Seurat_Object = Combined_Total_Seurat_Obj,
+                                    target_col = "HSPC",
+                                    comp1 = "LTHSC",
+                                    comp2 = "Stroma",
+                                    time_point = "P0",
+                                    result_dir="./results/Additional/RNA-Magnet/")
+
+### LTHSC vs Stroma - E16.5
+merge_heme_stroma_and_run_rnamagnet(Seurat_Object = Combined_Total_Seurat_Obj,
+                                    target_col = "HSPC",
+                                    comp1 = "LTHSC",
+                                    comp2 = "Stroma",
+                                    time_point = "E16.5",
+                                    result_dir="./results/Additional/RNA-Magnet/")
+
+### LTHSC vs Stroma - E18.5
+merge_heme_stroma_and_run_rnamagnet(Seurat_Object = Combined_Total_Seurat_Obj,
+                                    target_col = "HSPC",
+                                    comp1 = "LTHSC",
+                                    comp2 = "Stroma",
+                                    time_point = "E18.5",
+                                    result_dir="./results/Additional/RNA-Magnet/")
+
+### LTHSC vs Stroma - Adult
+merge_heme_stroma_and_run_rnamagnet(Seurat_Object = Combined_Total_Seurat_Obj,
+                                    target_col = "HSPC",
+                                    comp1 = "LTHSC",
+                                    comp2 = "Stroma",
+                                    time_point = "Adult",
+                                    result_dir="./results/Additional/RNA-Magnet/")
+
+
+### (STHSC, MPP2, MPP3, MPP4) vs Stroma - P0
+merge_heme_stroma_and_run_rnamagnet(Seurat_Object = Combined_Total_Seurat_Obj,
+                                    target_col = "HSPC",
+                                    comp1 = c("STHSC", "MPP2", "MPP3", "MPP4"),
+                                    comp2 = "Stroma",
+                                    time_point = "P0",
+                                    result_dir="./results/Additional/RNA-Magnet/")
+
+### (STHSC, MPP2, MPP3) vs Stroma - E16.5
+### MPP4_E16.5 has only 1 cell - makes an error, so I removed it
+merge_heme_stroma_and_run_rnamagnet(Seurat_Object = Combined_Total_Seurat_Obj,
+                                    target_col = "HSPC",
+                                    comp1 = c("STHSC", "MPP2", "MPP3"),
+                                    comp2 = "Stroma",
+                                    time_point = "E16.5",
+                                    result_dir="./results/Additional/RNA-Magnet/")
+
+### (STHSC, MPP2, MPP3, MPP4) vs Stroma - E18.5
+merge_heme_stroma_and_run_rnamagnet(Seurat_Object = Combined_Total_Seurat_Obj,
+                                    target_col = "HSPC",
+                                    comp1 = c("STHSC", "MPP2", "MPP3", "MPP4"),
+                                    comp2 = "Stroma",
+                                    time_point = "E18.5",
+                                    result_dir="./results/Additional/RNA-Magnet/")
+
+### (STHSC, MPP2, MPP3, MPP4) vs Stroma - Adult
+merge_heme_stroma_and_run_rnamagnet(Seurat_Object = Combined_Total_Seurat_Obj,
+                                    target_col = "HSPC",
+                                    comp1 = c("STHSC", "MPP2", "MPP3", "MPP4"),
+                                    comp2 = "Stroma",
+                                    time_point = "Adult",
+                                    result_dir="./results/Additional/RNA-Magnet/")
