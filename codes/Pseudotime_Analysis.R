@@ -607,7 +607,7 @@ pseudotime_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses
               font = font.main)
       }
       invisible(NULL)
-    }
+  }
   
   #' @name plot3d-SlingshotDataSet
   #' @title Plot Slingshot output in 3D
