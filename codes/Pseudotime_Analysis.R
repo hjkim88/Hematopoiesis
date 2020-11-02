@@ -245,6 +245,11 @@ pseudotime_analysis_trent <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses
             points(centers[clusters %in% const, dims,
                            drop=FALSE], cex = cex / 2,
                    col = constraints.col[const], pch = 16)
+            text(x = centers[clusters %in% const, dims[1]]+0.3,
+                 y = centers[clusters %in% const, dims[2]]+0.8,
+                 labels = const,
+                 cex = cex / 3,
+                 col = "black")
           }
         }
       }
