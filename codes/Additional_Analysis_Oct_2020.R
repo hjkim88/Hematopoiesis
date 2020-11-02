@@ -1614,10 +1614,8 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
     
     ### heatmap
     png(paste0(result_dir, PC, "_Heatmap_with_important_genes_", important_thresh, ".png"), width = 12000, height = 6000)
-    par(oma=c(0,0,2,6))
-    heatmap.3(as.matrix(heatmap_mat_scaled), main = paste0(PC, "_Genes_Heatmap_(",
-                                                           nrow(heatmap_mat_scaled), " Genes x ",
-                                                           ncol(heatmap_mat_scaled), " Cells)"),
+    par(oma=c(0,0,10,6))
+    heatmap.3(as.matrix(heatmap_mat_scaled),
               xlab = "", ylab = "", col=greenred(300),
               scale="none", key=T, keysize=0.8, density.info="density",
               dendrogram = "none", trace = "none",
@@ -1626,6 +1624,10 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
               distfun=dist.spear, hclustfun=hclust.ave,
               ColSideColors = cbind(colors[as.character(local_Seurat_Obj@meta.data[,target_col])]),
               cexRow = 1.9, cexCol = 1.9, na.rm = TRUE)
+    title(main = paste0(PC, "_Genes_Heatmap_(",
+                        nrow(heatmap_mat_scaled), " Genes x ",
+                        ncol(heatmap_mat_scaled), " Cells)"),
+          cex.main = 15, line = -10, outer = TRUE)
     legend("left", inset = 0, xpd = TRUE, title = "Time", legend = names(colors), fill = colors, cex = 15, box.lty = 0)
     dev.off()
     
@@ -1647,10 +1649,8 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
     
     ### heatmap
     png(paste0(result_dir, PC, "_Heatmap_with_garbage_genes_",  garbage_thresh, ".png"), width = 12000, height = 6000)
-    par(oma=c(0,0,2,6))
-    heatmap.3(as.matrix(heatmap_mat_scaled), main = paste0(PC, "_Genes_Heatmap_(",
-                                                           nrow(heatmap_mat_scaled), " Genes x ",
-                                                           ncol(heatmap_mat_scaled), " Cells)"),
+    par(oma=c(0,0,10,6))
+    heatmap.3(as.matrix(heatmap_mat_scaled),
               xlab = "", ylab = "", col=greenred(300),
               scale="none", key=T, keysize=0.8, density.info="density",
               dendrogram = "none", trace = "none",
@@ -1659,6 +1659,10 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
               distfun=dist.spear, hclustfun=hclust.ave,
               ColSideColors = cbind(colors[as.character(local_Seurat_Obj@meta.data[,target_col])]),
               cexRow = 1.9, cexCol = 1.9, na.rm = TRUE)
+    title(main = paste0(PC, "_Genes_Heatmap_(",
+                        nrow(heatmap_mat_scaled), " Genes x ",
+                        ncol(heatmap_mat_scaled), " Cells)"),
+          cex.main = 15, line = -10, outer = TRUE)
     legend("left", inset = 0, xpd = TRUE, title = "Time", legend = names(colors), fill = colors, cex = 15, box.lty = 0)
     dev.off()
     
@@ -1820,10 +1824,8 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
           
           ### heatmap
           png(paste0(result_dir2, PC, "_", PC_Val, "Comparison_Heatmap.png"), width = 12000, height = 6000)
-          par(oma=c(0,0,2,6))
-          heatmap.3(as.matrix(heatmap_mat_scaled), main = paste0(PC, "_Genes_Heatmap_(",
-                                                                 nrow(heatmap_mat_scaled), " Genes x ",
-                                                                 ncol(heatmap_mat_scaled), " Cells)"),
+          par(oma=c(0,0,10,6))
+          heatmap.3(as.matrix(heatmap_mat_scaled),
                     xlab = "", ylab = "", col=greenred(300),
                     scale="none", key=T, keysize=0.8, density.info="density",
                     dendrogram = "none", trace = "none",
@@ -1832,6 +1834,10 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
                     distfun=dist.spear, hclustfun=hclust.ave,
                     ColSideColors = cbind(colors[as.character(local_Seurat_Obj@meta.data[,target_col])]),
                     cexRow = 1.9, cexCol = 1.9, na.rm = TRUE)
+          title(main = paste0(PC, "_Genes_Heatmap_(",
+                              nrow(heatmap_mat_scaled), " Genes x ",
+                              ncol(heatmap_mat_scaled), " Cells)"),
+                cex.main = 15, line = -10, outer = TRUE)
           legend("left", inset = 0, xpd = TRUE, title = "Time", legend = names(colors), fill = colors, cex = 15, box.lty = 0)
           dev.off()
           
