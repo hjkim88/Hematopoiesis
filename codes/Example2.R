@@ -1604,8 +1604,19 @@ merge_heme_stroma_and_run_rnamagnet <- function(Seurat_Object,
   ### get colors for the clustering result
   cell_colors_clust <- cell_pal(unique(Seurat_Object@meta.data$Group), hue_pal())
   
+  ### scatter plot
+  p <- list()
+  
   ### draw a scatter plot with the adhesiveness info
-  ggplot(plot_df, aes_string(x="X", y="Y")) +
+  p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+    geom_point(aes_string(col="cell_type"), size=2) +
+    xlab("PC1") + ylab("PC2") +
+    labs(col="Cluster") +
+    ggtitle("PCA with Cell Type") +
+    theme_classic(base_size = 16)
+  p[[1]] <- LabelClusters(plot = p[[1]], id = "cluster_color")
+  
+  p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
     geom_point(aes_string(col="group_color", alpha="group_alpha"), size=2) +
     xlab("PC1") + ylab("PC2") +
     labs(col="Direction", alpha="Adhesiveness") +
@@ -1613,8 +1624,15 @@ merge_heme_stroma_and_run_rnamagnet <- function(Seurat_Object,
     theme_classic(base_size = 16) +
     scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$group_color)[order(unique(plot_df$group_color))])],
                        labels = names(cell_colors_clust[as.character(unique(plot_df$group_color)[order(unique(plot_df$group_color))])]))
+  p[[2]] <- LabelClusters(plot = p[[2]], id = "cluster_color")
+  
+  ### save the plots
+  g <- arrangeGrob(grobs = p,
+                   nrow = 2,
+                   ncol = 1,
+                   top = "")
   ggsave(file = paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
-                                 "_RNAMagnet_Result_AD_", time_point, ".png"), width = 20, height = 12, dpi = 300)
+                                 "_RNAMagnet_Result_AD_", time_point, ".png"), g, width = 20, height = 12, dpi = 300)
   
   ### draw a scatter plot with the specificity info
   ggplot(plot_df, aes_string(x="X", y="Y")) +
