@@ -26,6 +26,10 @@ merge_data <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/Stroma and Hem
     install.packages("Seurat")
     require(Seurat, quietly = TRUE)
   }
+  if(!require(ggplot2, quietly = TRUE)) {
+    install.packages("ggplot2")
+    require(ggplot2, quietly = TRUE)
+  }
   
   ### get Robj file list
   f_list <- list.files(Robj_path, pattern = ".Robj$")
@@ -137,9 +141,27 @@ merge_data <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/Stroma and Hem
   }
   
   ### annotate HSPC types in the original Seurat object
+  Combined_Seurat_Obj@meta.data$HSPC <- "Other_Heme"
+  Combined_Seurat_Obj@meta.data$HSPC[which(Combined_Seurat_Obj@meta.data$Cell_Type == "Stroma")] <- "Stroma"
+  HSPC_barcodes <- intersect(Combined_Seurat_Obj@meta.data$GexCellFull,
+                             Combined_Seurat_Obj2@meta.data$GexCellFull)
+  Combined_Seurat_Obj@meta.data[HSPC_barcodes, "HSPC"] <- Combined_Seurat_Obj2@meta.data[HSPC_barcodes, "HSPC"]
   
+  ### run PCA
+  Combined_Seurat_Obj <- FindVariableFeatures(Combined_Seurat_Obj)
+  Combined_Seurat_Obj <- ScaleData(Combined_Seurat_Obj)
+  Combined_Seurat_Obj <- RunPCA(Combined_Seurat_Obj, npcs = 15)
+  Combined_Seurat_Obj <- RunUMAP(Combined_Seurat_Obj, dims = 1:15)
   
+  ### draw a PCA
+  DimPlot(Combined_Seurat_Obj, reduction = "pca", group.by = "HSPC", pt.size = 1.5) +
+    labs(title = paste0("PCA_Combined_Tissue"))
   
+  ### check whether the orders are the same
+  print(identical(names(Idents(object = Combined_Seurat_Obj)), rownames(Combined_Seurat_Obj@meta.data)))
   
+  ### save the combined file as RDS
+  saveRDS(Combined_Seurat_Obj,
+          file = paste0(outputDir, "Combined_Seurat_Obj.RDS"))
   
 }
