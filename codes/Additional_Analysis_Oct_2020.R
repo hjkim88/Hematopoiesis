@@ -14,12 +14,12 @@
 #   Example
 #               > source("The_directory_of_Additional_Analysis_Oct_2020.R/Additional_Analysis_Oct_2020.R")
 #               > additional_analysis(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
-#                                     Robj2_path="./data/Combined_BM_Seurat_Obj.RDATA",
+#                                     Robj2_path="./data/Combined_Seurat_Obj.RDS",
 #                                     outputDir="./results/Additional_Oct2020/")
 ###
 
 additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
-                                Robj2_path="./data/Combined_BM_Seurat_Obj.RDATA",
+                                Robj2_path="./data/Combined_Seurat_Obj.RDS",
                                 outputDir="./results/Additional_Oct2020/") {
   
   ### load libraries
@@ -312,7 +312,7 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
                            drop=FALSE], cex = cex / 2,
                    col = constraints.col[const], pch = 16)
             text(x = centers[clusters %in% const, dims[1]]+0.5,
-                 y = centers[clusters %in% const, dims[2]]+2,
+                 y = centers[clusters %in% const, dims[2]]+1,
                  labels = const,
                  cex = cex / 3,
                  col = "black")
@@ -2372,6 +2372,183 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
                            important_thresh = 0.1,
                            garbage_thresh = 1e-04,
                            result_dir = paste0(outputDir2, "PC3_10/"))
+  
+  
+  #
+  ### Analysis #3, #4, #5, & #6
+  #
+  
+  ### updated stroma RDS file
+  Updated_Seurat_Obj <- readRDS(file = Robj2_path)
+  
+  ### check whether the orders are the same
+  print(identical(names(Idents(object = Updated_Seurat_Obj)), rownames(Updated_Seurat_Obj@meta.data)))
+  
+  ### determine necessary variables
+  time_points <- c("E16", "E18", "P0", "ADULT")
+  HSPC_populations <- c("LTHSC", "STHSC", "MPP2", "MPP3", "MPP4")
+  
+  ### set the ident of the object with the HSPC type
+  Updated_Seurat_Obj <- SetIdent(object = Updated_Seurat_Obj,
+                                 cells = rownames(Updated_Seurat_Obj@meta.data),
+                                 value = Updated_Seurat_Obj@meta.data$Tissue)
+  
+  ### check whether the orders are the same
+  print(identical(names(Idents(object = Updated_Seurat_Obj)), rownames(Updated_Seurat_Obj@meta.data)))
+  
+  
+  ### new output directory
+  type <- "StromaE16"
+  outputDir2 <- paste0(outputDir, type, "/")
+  dir.create(outputDir2, showWarnings = FALSE, recursive = TRUE)
+  
+  ### split the Seurat obj based on HSPC info
+  subset_Seurat_Obj <- subset(Updated_Seurat_Obj, idents=type)
+  
+  ### rownames in the meta.data should be in the same order as colnames in the counts
+  subset_Seurat_Obj@assays$RNA@counts <- subset_Seurat_Obj@assays$RNA@counts[,rownames(subset_Seurat_Obj@meta.data)]
+  
+  ### clustering on the seurat object
+  subset_Seurat_Obj <- FindNeighbors(subset_Seurat_Obj, dims = 1:5, k.param = 5)
+  subset_Seurat_Obj <- FindClusters(subset_Seurat_Obj, resolution = 0.4)
+  subset_Seurat_Obj@meta.data$new_clusts <- Idents(subset_Seurat_Obj)
+  
+  ### run PCA
+  subset_Seurat_Obj <- RunPCA(subset_Seurat_Obj, npcs = 10)
+  pca_map <- Embeddings(subset_Seurat_Obj, reduction = "pca")[rownames(subset_Seurat_Obj@meta.data),1:10]
+  
+  ### get slingshot object
+  slingshot_obj <- slingshot(pca_map,
+                             clusterLabels = subset_Seurat_Obj@meta.data$new_clusts, 
+                             reducedDim = "PCA")
+  
+  ### get colors for the clustering result
+  cell_colors_clust <- cell_pal(levels(subset_Seurat_Obj@meta.data$new_clusts), hue_pal())
+  
+  ### Trajectory inference
+  png(paste0(outputDir2, type, "_Trajectory_Inference_PCA.png"), width = 2500, height = 1500, res = 200)
+  plot(reducedDim(slingshot_obj),
+       main=paste(type, "Trajectory Inference (PCA)"),
+       col = cell_colors_clust[as.character(subset_Seurat_Obj@meta.data$new_clusts)],
+       pch = 19, cex = 1)
+  lines(slingshot_obj, lwd = 2, type = "lineages", col = "black",
+        show.constraints = TRUE, constraints.col = cell_colors_clust)
+  legend("bottomleft", legend = names(cell_colors_clust), col = cell_colors_clust,
+         title = "Clusters",  pch = 19)
+  dev.off()
+  
+  ### Trajectory inference on multi dimentional PCA
+  png(paste0(outputDir2, type, "_Trajectory_Inference_Multi-PCA.png"), width = 2500, height = 1500, res = 200)
+  pairs(slingshot_obj, type="lineages", col = apply(slingshot_obj@clusterLabels, 1, function(x) cell_colors_clust[names(x)[which(x == 1)]]),
+        show.constraints = TRUE, constraints.col = cell_colors_clust, cex = 0.8,
+        horInd = 1:5, verInd = 1:5, main = paste0(type, "_Trajectory_Inference"))
+  par(xpd = TRUE)
+  legend("bottomleft", legend = names(cell_colors_clust), col = cell_colors_clust,
+         title = "Clusters",  pch = 19)
+  dev.off()
+  
+  ### new output directory
+  type <- "StromaE18"
+  outputDir2 <- paste0(outputDir, type, "/")
+  dir.create(outputDir2, showWarnings = FALSE, recursive = TRUE)
+  
+  ### split the Seurat obj based on HSPC info
+  subset_Seurat_Obj <- subset(Updated_Seurat_Obj, idents=type)
+  
+  ### rownames in the meta.data should be in the same order as colnames in the counts
+  subset_Seurat_Obj@assays$RNA@counts <- subset_Seurat_Obj@assays$RNA@counts[,rownames(subset_Seurat_Obj@meta.data)]
+  
+  ### clustering on the seurat object
+  subset_Seurat_Obj <- FindNeighbors(subset_Seurat_Obj, dims = 1:5, k.param = 5)
+  subset_Seurat_Obj <- FindClusters(subset_Seurat_Obj, resolution = 0.4)
+  subset_Seurat_Obj@meta.data$new_clusts <- Idents(subset_Seurat_Obj)
+  
+  ### run PCA
+  subset_Seurat_Obj <- RunPCA(subset_Seurat_Obj, npcs = 10)
+  pca_map <- Embeddings(subset_Seurat_Obj, reduction = "pca")[rownames(subset_Seurat_Obj@meta.data),1:10]
+  
+  ### get slingshot object
+  slingshot_obj <- slingshot(pca_map,
+                             clusterLabels = subset_Seurat_Obj@meta.data$new_clusts, 
+                             reducedDim = "PCA")
+  
+  ### get colors for the clustering result
+  cell_colors_clust <- cell_pal(levels(subset_Seurat_Obj@meta.data$new_clusts), hue_pal())
+  
+  ### Trajectory inference
+  png(paste0(outputDir2, type, "_Trajectory_Inference_PCA.png"), width = 2500, height = 1500, res = 200)
+  plot(reducedDim(slingshot_obj),
+       main=paste(type, "Trajectory Inference (PCA)"),
+       col = cell_colors_clust[as.character(subset_Seurat_Obj@meta.data$new_clusts)],
+       pch = 19, cex = 1)
+  lines(slingshot_obj, lwd = 2, type = "lineages", col = "black",
+        show.constraints = TRUE, constraints.col = cell_colors_clust)
+  legend("bottomleft", legend = names(cell_colors_clust), col = cell_colors_clust,
+         title = "Clusters",  pch = 19)
+  dev.off()
+  
+  ### Trajectory inference on multi dimentional PCA
+  png(paste0(outputDir2, type, "_Trajectory_Inference_Multi-PCA.png"), width = 2500, height = 1500, res = 200)
+  pairs(slingshot_obj, type="lineages", col = apply(slingshot_obj@clusterLabels, 1, function(x) cell_colors_clust[names(x)[which(x == 1)]]),
+        show.constraints = TRUE, constraints.col = cell_colors_clust, cex = 0.8,
+        horInd = 1:5, verInd = 1:5, main = paste0(type, "_Trajectory_Inference"))
+  par(xpd = TRUE)
+  legend("bottomleft", legend = names(cell_colors_clust), col = cell_colors_clust,
+         title = "Clusters",  pch = 19)
+  dev.off()
+  
+  ### new output directory
+  type <- "StromaP0"
+  outputDir2 <- paste0(outputDir, type, "/")
+  dir.create(outputDir2, showWarnings = FALSE, recursive = TRUE)
+  
+  ### split the Seurat obj based on HSPC info
+  subset_Seurat_Obj <- subset(Updated_Seurat_Obj, idents=type)
+  
+  ### rownames in the meta.data should be in the same order as colnames in the counts
+  subset_Seurat_Obj@assays$RNA@counts <- subset_Seurat_Obj@assays$RNA@counts[,rownames(subset_Seurat_Obj@meta.data)]
+  
+  ### clustering on the seurat object
+  subset_Seurat_Obj <- FindNeighbors(subset_Seurat_Obj, dims = 1:5, k.param = 5)
+  subset_Seurat_Obj <- FindClusters(subset_Seurat_Obj, resolution = 0.4)
+  subset_Seurat_Obj@meta.data$new_clusts <- Idents(subset_Seurat_Obj)
+  
+  ### run PCA
+  subset_Seurat_Obj <- RunPCA(subset_Seurat_Obj, npcs = 10)
+  pca_map <- Embeddings(subset_Seurat_Obj, reduction = "pca")[rownames(subset_Seurat_Obj@meta.data),1:10]
+  
+  ### get slingshot object
+  slingshot_obj <- slingshot(pca_map,
+                             clusterLabels = subset_Seurat_Obj@meta.data$new_clusts, 
+                             reducedDim = "PCA")
+  
+  ### get colors for the clustering result
+  cell_colors_clust <- cell_pal(levels(subset_Seurat_Obj@meta.data$new_clusts), hue_pal())
+  
+  ### Trajectory inference
+  png(paste0(outputDir2, type, "_Trajectory_Inference_PCA.png"), width = 2500, height = 1500, res = 200)
+  plot(reducedDim(slingshot_obj),
+       main=paste(type, "Trajectory Inference (PCA)"),
+       col = cell_colors_clust[as.character(subset_Seurat_Obj@meta.data$new_clusts)],
+       pch = 19, cex = 1)
+  lines(slingshot_obj, lwd = 2, type = "lineages", col = "black",
+        show.constraints = TRUE, constraints.col = cell_colors_clust)
+  legend("bottomleft", legend = names(cell_colors_clust), col = cell_colors_clust,
+         title = "Clusters",  pch = 19)
+  dev.off()
+  
+  ### Trajectory inference on multi dimentional PCA
+  png(paste0(outputDir2, type, "_Trajectory_Inference_Multi-PCA.png"), width = 2500, height = 1500, res = 200)
+  pairs(slingshot_obj, type="lineages", col = apply(slingshot_obj@clusterLabels, 1, function(x) cell_colors_clust[names(x)[which(x == 1)]]),
+        show.constraints = TRUE, constraints.col = cell_colors_clust, cex = 0.8,
+        horInd = 1:5, verInd = 1:5, main = paste0(type, "_Trajectory_Inference"))
+  par(xpd = TRUE)
+  legend("bottomleft", legend = names(cell_colors_clust), col = cell_colors_clust,
+         title = "Clusters",  pch = 19)
+  dev.off()
+  
+  
+  
   
   #
   ### RNA Magnet
