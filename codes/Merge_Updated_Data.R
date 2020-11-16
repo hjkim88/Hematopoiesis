@@ -76,7 +76,7 @@ merge_data <- function(Robj_path="C:/Users/hkim8/SJ/HSPC Analyses/Stroma and Hem
     Seurat_Obj@meta.data$Cell_Type <- possible_names_mat[tissue_name, "Type"]
     
     ### get additional annotations from the Idents
-    
+    Seurat_Obj@meta.data$Annotation <- Idents(Seurat_Obj)
     
     ### combine the Seurat R objects
     if(is.null(Combined_Seurat_Obj)) {
