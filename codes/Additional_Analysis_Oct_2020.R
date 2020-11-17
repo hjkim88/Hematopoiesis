@@ -79,6 +79,14 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
     install.packages("gridExtra")
     require(gridExtra, quietly = TRUE)
   }
+  if(!require(ggbeeswarm, quietly = TRUE)) {
+    install.packages("ggbeeswarm")
+    require(ggbeeswarm, quietly = TRUE)
+  }
+  if(!require(ggpubr, quietly = TRUE)) {
+    install.packages("ggpubr")
+    require(ggpubr, quietly = TRUE)
+  }
   
   ### load the Seurat object and save the object name
   tmp_env <- new.env()
@@ -2408,28 +2416,23 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
   ### rownames in the meta.data should be in the same order as colnames in the counts
   subset_Seurat_Obj@assays$RNA@counts <- subset_Seurat_Obj@assays$RNA@counts[,rownames(subset_Seurat_Obj@meta.data)]
   
-  ### clustering on the seurat object
-  subset_Seurat_Obj <- FindNeighbors(subset_Seurat_Obj, dims = 1:5, k.param = 5)
-  subset_Seurat_Obj <- FindClusters(subset_Seurat_Obj, resolution = 0.4)
-  subset_Seurat_Obj@meta.data$new_clusts <- Idents(subset_Seurat_Obj)
-  
   ### run PCA
-  subset_Seurat_Obj <- RunPCA(subset_Seurat_Obj, npcs = 10)
-  pca_map <- Embeddings(subset_Seurat_Obj, reduction = "pca")[rownames(subset_Seurat_Obj@meta.data),1:10]
+  subset_Seurat_Obj <- RunPCA(subset_Seurat_Obj, npcs = 5)
+  pca_map <- Embeddings(subset_Seurat_Obj, reduction = "pca")[rownames(subset_Seurat_Obj@meta.data),]
   
   ### get slingshot object
   slingshot_obj <- slingshot(pca_map,
-                             clusterLabels = subset_Seurat_Obj@meta.data$new_clusts, 
+                             clusterLabels = subset_Seurat_Obj@meta.data$Dev_Anno, 
                              reducedDim = "PCA")
   
   ### get colors for the clustering result
-  cell_colors_clust <- cell_pal(levels(subset_Seurat_Obj@meta.data$new_clusts), hue_pal())
+  cell_colors_clust <- cell_pal(unique(subset_Seurat_Obj@meta.data$Dev_Anno), hue_pal())
   
   ### Trajectory inference
   png(paste0(outputDir2, type, "_Trajectory_Inference_PCA.png"), width = 2500, height = 1500, res = 200)
   plot(reducedDim(slingshot_obj),
        main=paste(type, "Trajectory Inference (PCA)"),
-       col = cell_colors_clust[as.character(subset_Seurat_Obj@meta.data$new_clusts)],
+       col = cell_colors_clust[as.character(subset_Seurat_Obj@meta.data$Dev_Anno)],
        pch = 19, cex = 1)
   lines(slingshot_obj, lwd = 2, type = "lineages", col = "black",
         show.constraints = TRUE, constraints.col = cell_colors_clust)
@@ -2458,28 +2461,23 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
   ### rownames in the meta.data should be in the same order as colnames in the counts
   subset_Seurat_Obj@assays$RNA@counts <- subset_Seurat_Obj@assays$RNA@counts[,rownames(subset_Seurat_Obj@meta.data)]
   
-  ### clustering on the seurat object
-  subset_Seurat_Obj <- FindNeighbors(subset_Seurat_Obj, dims = 1:5, k.param = 5)
-  subset_Seurat_Obj <- FindClusters(subset_Seurat_Obj, resolution = 0.4)
-  subset_Seurat_Obj@meta.data$new_clusts <- Idents(subset_Seurat_Obj)
-  
   ### run PCA
-  subset_Seurat_Obj <- RunPCA(subset_Seurat_Obj, npcs = 10)
-  pca_map <- Embeddings(subset_Seurat_Obj, reduction = "pca")[rownames(subset_Seurat_Obj@meta.data),1:10]
+  subset_Seurat_Obj <- RunPCA(subset_Seurat_Obj, npcs = 5)
+  pca_map <- Embeddings(subset_Seurat_Obj, reduction = "pca")[rownames(subset_Seurat_Obj@meta.data),]
   
   ### get slingshot object
   slingshot_obj <- slingshot(pca_map,
-                             clusterLabels = subset_Seurat_Obj@meta.data$new_clusts, 
+                             clusterLabels = subset_Seurat_Obj@meta.data$Dev_Anno, 
                              reducedDim = "PCA")
   
   ### get colors for the clustering result
-  cell_colors_clust <- cell_pal(levels(subset_Seurat_Obj@meta.data$new_clusts), hue_pal())
+  cell_colors_clust <- cell_pal(unique(subset_Seurat_Obj@meta.data$Dev_Anno), hue_pal())
   
   ### Trajectory inference
   png(paste0(outputDir2, type, "_Trajectory_Inference_PCA.png"), width = 2500, height = 1500, res = 200)
   plot(reducedDim(slingshot_obj),
        main=paste(type, "Trajectory Inference (PCA)"),
-       col = cell_colors_clust[as.character(subset_Seurat_Obj@meta.data$new_clusts)],
+       col = cell_colors_clust[as.character(subset_Seurat_Obj@meta.data$Dev_Anno)],
        pch = 19, cex = 1)
   lines(slingshot_obj, lwd = 2, type = "lineages", col = "black",
         show.constraints = TRUE, constraints.col = cell_colors_clust)
@@ -2508,28 +2506,23 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
   ### rownames in the meta.data should be in the same order as colnames in the counts
   subset_Seurat_Obj@assays$RNA@counts <- subset_Seurat_Obj@assays$RNA@counts[,rownames(subset_Seurat_Obj@meta.data)]
   
-  ### clustering on the seurat object
-  subset_Seurat_Obj <- FindNeighbors(subset_Seurat_Obj, dims = 1:5, k.param = 5)
-  subset_Seurat_Obj <- FindClusters(subset_Seurat_Obj, resolution = 0.4)
-  subset_Seurat_Obj@meta.data$new_clusts <- Idents(subset_Seurat_Obj)
-  
   ### run PCA
-  subset_Seurat_Obj <- RunPCA(subset_Seurat_Obj, npcs = 10)
-  pca_map <- Embeddings(subset_Seurat_Obj, reduction = "pca")[rownames(subset_Seurat_Obj@meta.data),1:10]
+  subset_Seurat_Obj <- RunPCA(subset_Seurat_Obj, npcs = 5)
+  pca_map <- Embeddings(subset_Seurat_Obj, reduction = "pca")[rownames(subset_Seurat_Obj@meta.data),]
   
   ### get slingshot object
   slingshot_obj <- slingshot(pca_map,
-                             clusterLabels = subset_Seurat_Obj@meta.data$new_clusts, 
+                             clusterLabels = subset_Seurat_Obj@meta.data$Dev_Anno, 
                              reducedDim = "PCA")
   
   ### get colors for the clustering result
-  cell_colors_clust <- cell_pal(levels(subset_Seurat_Obj@meta.data$new_clusts), hue_pal())
+  cell_colors_clust <- cell_pal(unique(subset_Seurat_Obj@meta.data$Dev_Anno), hue_pal())
   
   ### Trajectory inference
   png(paste0(outputDir2, type, "_Trajectory_Inference_PCA.png"), width = 2500, height = 1500, res = 200)
   plot(reducedDim(slingshot_obj),
        main=paste(type, "Trajectory Inference (PCA)"),
-       col = cell_colors_clust[as.character(subset_Seurat_Obj@meta.data$new_clusts)],
+       col = cell_colors_clust[as.character(subset_Seurat_Obj@meta.data$Dev_Anno)],
        pch = 19, cex = 1)
   lines(slingshot_obj, lwd = 2, type = "lineages", col = "black",
         show.constraints = TRUE, constraints.col = cell_colors_clust)
@@ -2548,6 +2541,185 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
   dev.off()
   
   
+  ### Analysis #5
+  ### Pseudotime Analysis by combining all updated stroma objects,
+  ### but for the adult library, only visualize the "CARs" population
+  ### (visualize all other annotated populations from other libraries)
+  
+  ### new output directory
+  type <- "Stroma_Adult_CARs"
+  outputDir2 <- paste0(outputDir, type, "/")
+  dir.create(outputDir2, showWarnings = FALSE, recursive = TRUE)
+  
+  ### set the ident of the object with the cell type to extract Stromas only
+  Updated_Seurat_Obj <- SetIdent(object = Updated_Seurat_Obj,
+                                 cells = rownames(Updated_Seurat_Obj@meta.data),
+                                 value = Updated_Seurat_Obj@meta.data$Cell_Type)
+  
+  ### split the Seurat obj based on the cell type
+  subset_Seurat_Obj <- subset(Updated_Seurat_Obj, idents="Stroma")
+  
+  ### create new column for the analysis
+  subset_Seurat_Obj@meta.data$Dev_Anno <- paste0(subset_Seurat_Obj@meta.data$Development, "_",
+                                                 subset_Seurat_Obj@meta.data$Annotation)
+  
+  ### set the ident of the object with the Trent's annotation
+  subset_Seurat_Obj <- SetIdent(object = subset_Seurat_Obj,
+                                cells = rownames(subset_Seurat_Obj@meta.data),
+                                value = subset_Seurat_Obj@meta.data$Dev_Anno)
+  
+  ### split the Seurat obj based on the Trent's annotation
+  subset_Seurat_Obj <- subset(subset_Seurat_Obj, idents=c("ADULT_CARs",
+                                                          unique(subset_Seurat_Obj@meta.data$Dev_Anno)[!grepl("ADULT", unique(subset_Seurat_Obj@meta.data$Dev_Anno))]))
+  
+  ### rownames in the meta.data should be in the same order as colnames in the counts
+  subset_Seurat_Obj@assays$RNA@counts <- subset_Seurat_Obj@assays$RNA@counts[,rownames(subset_Seurat_Obj@meta.data)]
+  
+  ### run UMAP
+  subset_Seurat_Obj <- RunUMAP(subset_Seurat_Obj, dims = 1:5)
+  umap_map <- Embeddings(subset_Seurat_Obj, reduction = "umap")[rownames(subset_Seurat_Obj@meta.data),]
+  
+  ### get slingshot object
+  slingshot_obj <- slingshot(umap_map,
+                             clusterLabels = subset_Seurat_Obj@meta.data$Development, 
+                             reducedDim = "UMAP")
+  
+  ### get colors for the clustering result
+  cell_colors_clust <- cell_pal(time_points, hue_pal())
+  
+  ### Trajectory inference
+  png(paste0(outputDir2, type, "_Trajectory_Inference_UMAP.png"), width = 2500, height = 1500, res = 200)
+  plot(reducedDim(slingshot_obj),
+       main=paste(type, "Trajectory Inference (UMAP)"),
+       col = cell_colors_clust[as.character(subset_Seurat_Obj@meta.data$Development)],
+       pch = 19, cex = 1)
+  lines(slingshot_obj, lwd = 2, type = "lineages", col = "black",
+        show.constraints = TRUE, constraints.col = cell_colors_clust)
+  legend("bottomleft", legend = names(cell_colors_clust), col = cell_colors_clust,
+         title = "Clusters",  pch = 19)
+  dev.off()
+  
+  ### run PCA
+  subset_Seurat_Obj <- RunPCA(subset_Seurat_Obj, npcs = 5)
+  pca_map <- Embeddings(subset_Seurat_Obj, reduction = "pca")[rownames(subset_Seurat_Obj@meta.data),]
+  
+  ### get slingshot object
+  slingshot_obj <- slingshot(pca_map,
+                             clusterLabels = subset_Seurat_Obj@meta.data$Development, 
+                             reducedDim = "PCA")
+  
+  ### get colors for the clustering result
+  cell_colors_clust <- cell_pal(time_points, hue_pal())
+  
+  ### Trajectory inference
+  png(paste0(outputDir2, type, "_Trajectory_Inference_PCA.png"), width = 2500, height = 1500, res = 200)
+  plot(reducedDim(slingshot_obj),
+       main=paste(type, "Trajectory Inference (PCA)"),
+       col = cell_colors_clust[as.character(subset_Seurat_Obj@meta.data$Development)],
+       pch = 19, cex = 1)
+  lines(slingshot_obj, lwd = 2, type = "lineages", col = "black",
+        show.constraints = TRUE, constraints.col = cell_colors_clust)
+  legend("bottomleft", legend = names(cell_colors_clust), col = cell_colors_clust,
+         title = "Clusters",  pch = 19)
+  dev.off()
+  
+  ### Trajectory inference on multi dimentional PCA
+  png(paste0(outputDir2, type, "_Trajectory_Inference_Multi-PCA.png"), width = 2500, height = 1500, res = 200)
+  pairs(slingshot_obj, type="lineages", col = apply(slingshot_obj@clusterLabels, 1, function(x) cell_colors_clust[names(x)[which(x == 1)]]),
+        show.constraints = TRUE, constraints.col = cell_colors_clust, cex = 0.8,
+        horInd = 1:5, verInd = 1:5, main = paste0(type, "_Trajectory_Inference"))
+  par(xpd = TRUE)
+  legend("bottomleft", legend = names(cell_colors_clust), col = cell_colors_clust,
+         title = "Clusters",  pch = 19)
+  dev.off()
+  
+  
+  ### Analysis #6
+  ### Perform with all of the updated Heme objects.
+  ### only visualize the "T Cell" and "Mast" clusters in E16.5,
+  ### along with all other clusters from the other libraries
+  
+  ### new output directory
+  type <- "Heme_E16_TCell_Mast"
+  outputDir2 <- paste0(outputDir, type, "/")
+  dir.create(outputDir2, showWarnings = FALSE, recursive = TRUE)
+  
+  ### set the ident of the object with the cell type to extract Stromas only
+  Updated_Seurat_Obj <- SetIdent(object = Updated_Seurat_Obj,
+                                 cells = rownames(Updated_Seurat_Obj@meta.data),
+                                 value = Updated_Seurat_Obj@meta.data$Cell_Type)
+  
+  ### split the Seurat obj based on the cell type
+  subset_Seurat_Obj <- subset(Updated_Seurat_Obj, idents="Heme")
+  
+  ### create new column for the analysis
+  subset_Seurat_Obj@meta.data$Dev_Anno <- paste0(subset_Seurat_Obj@meta.data$Development, "_",
+                                                 subset_Seurat_Obj@meta.data$Annotation)
+  
+  ### set the ident of the object with the Trent's annotation
+  subset_Seurat_Obj <- SetIdent(object = subset_Seurat_Obj,
+                                cells = rownames(subset_Seurat_Obj@meta.data),
+                                value = subset_Seurat_Obj@meta.data$Dev_Anno)
+  
+  ### split the Seurat obj based on the Trent's annotation
+  subset_Seurat_Obj <- subset(subset_Seurat_Obj, idents=c("E16_Mono/Mast", "E16_Mast1", "E16_Mast2", "E16_Mast3",
+                                                          "E16_TCell1", "E16_TCell2", "E16_TCell3", "E16_TCell4", "E16_TCell5", "E16_TCell6",
+                                                          unique(subset_Seurat_Obj@meta.data$Dev_Anno)[!grepl("E16", unique(subset_Seurat_Obj@meta.data$Dev_Anno))]))
+  
+  ### rownames in the meta.data should be in the same order as colnames in the counts
+  subset_Seurat_Obj@assays$RNA@counts <- subset_Seurat_Obj@assays$RNA@counts[,rownames(subset_Seurat_Obj@meta.data)]
+  
+  ### run UMAP
+  subset_Seurat_Obj <- RunUMAP(subset_Seurat_Obj, dims = 1:5)
+  umap_map <- Embeddings(subset_Seurat_Obj, reduction = "umap")[rownames(subset_Seurat_Obj@meta.data),]
+  
+  ### get slingshot object
+  slingshot_obj <- slingshot(umap_map,
+                             clusterLabels = subset_Seurat_Obj@meta.data$Dev_Anno, 
+                             reducedDim = "UMAP")
+  
+  ### get colors for the clustering result
+  cell_colors_clust <- cell_pal(unique(subset_Seurat_Obj@meta.data$Dev_Anno), hue_pal())
+  
+  ### Trajectory inference
+  png(paste0(outputDir2, type, "_Trajectory_Inference_UMAP.png"), width = 2500, height = 1500, res = 200)
+  plot(reducedDim(slingshot_obj),
+       main=paste(type, "Trajectory Inference (UMAP)"),
+       col = cell_colors_clust[as.character(subset_Seurat_Obj@meta.data$Dev_Anno)],
+       pch = 19, cex = 1)
+  lines(slingshot_obj, lwd = 2, type = "lineages", col = "black",
+        show.constraints = TRUE, constraints.col = cell_colors_clust)
+  dev.off()
+  
+  ### run PCA
+  subset_Seurat_Obj <- RunPCA(subset_Seurat_Obj, npcs = 5)
+  pca_map <- Embeddings(subset_Seurat_Obj, reduction = "pca")[rownames(subset_Seurat_Obj@meta.data),]
+  
+  ### get slingshot object
+  slingshot_obj <- slingshot(pca_map,
+                             clusterLabels = subset_Seurat_Obj@meta.data$Dev_Anno, 
+                             reducedDim = "PCA")
+  
+  ### get colors for the clustering result
+  cell_colors_clust <- cell_pal(unique(subset_Seurat_Obj@meta.data$Dev_Anno), hue_pal())
+  
+  ### Trajectory inference
+  png(paste0(outputDir2, type, "_Trajectory_Inference_PCA.png"), width = 2500, height = 1500, res = 200)
+  plot(reducedDim(slingshot_obj),
+       main=paste(type, "Trajectory Inference (PCA)"),
+       col = cell_colors_clust[as.character(subset_Seurat_Obj@meta.data$Dev_Anno)],
+       pch = 19, cex = 1)
+  lines(slingshot_obj, lwd = 2, type = "lineages", col = "black",
+        show.constraints = TRUE, constraints.col = cell_colors_clust)
+  dev.off()
+  
+  ### Trajectory inference on multi dimentional PCA
+  png(paste0(outputDir2, type, "_Trajectory_Inference_Multi-PCA.png"), width = 2500, height = 1500, res = 200)
+  pairs(slingshot_obj, type="lineages", col = apply(slingshot_obj@clusterLabels, 1, function(x) cell_colors_clust[names(x)[which(x == 1)]]),
+        show.constraints = TRUE, constraints.col = cell_colors_clust, cex = 0.8,
+        horInd = 1:5, verInd = 1:5, main = paste0(type, "_Trajectory_Inference"))
+  par(xpd = TRUE)
+  dev.off()
   
   
   #
@@ -2560,6 +2732,7 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
                                                   comp1,
                                                   comp2,
                                                   time_point,
+                                                  dim_method=c("UMAP", "PCA"),
                                                   result_dir="./") {
     
     ### set output directory
@@ -2590,11 +2763,20 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
     ### test
     # Seurat_Object <- subset(Seurat_Object, cells = rownames(Seurat_Object@meta.data)[which(Seurat_Object@reductions$pca@cell.embeddings[,"PC_2"] < 0)])
     
-    ### run PCA
+    ### preprocessing
     Seurat_Object <- FindVariableFeatures(Seurat_Object)
     Seurat_Object <- ScaleData(Seurat_Object)
-    Seurat_Object <- RunPCA(Seurat_Object, npcs = 15)
-    pca_map <- Embeddings(Seurat_Object, reduction = "pca")[rownames(Seurat_Object@meta.data),1:15]
+    
+    ### run PCA/UMAP
+    if(dim_method == "PCA") {
+      Seurat_Object <- RunPCA(Seurat_Object, npcs = 15)
+      dim_map <- Embeddings(Seurat_Object, reduction = "pca")[rownames(Seurat_Object@meta.data),]
+    } else if(dim_method == "UMAP") {
+      Seurat_Object <- RunUMAP(Seurat_Object, dims = 1:15)
+      dim_map <- Embeddings(Seurat_Object, reduction = "umap")[rownames(Seurat_Object@meta.data),]
+    } else {
+      stop("ERROR: dim_method not PCA nor UMAP.")
+    }
     
     ### run RNAMagnet with anchors
     result <- RNAMagnetAnchors(Seurat_Object,
@@ -2616,12 +2798,12 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
     }))
     
     ### check the order
-    print(identical(rownames(Seurat_Object@meta.data), rownames(pca_map)))
+    print(identical(rownames(Seurat_Object@meta.data), rownames(dim_map)))
     
     ### make a data frame for ggplot
-    plot_df <- data.frame(X=pca_map[rownames(Seurat_Object@meta.data),"PC_1"],
-                          Y=pca_map[rownames(Seurat_Object@meta.data),"PC_2"],
-                          group_color = Seurat_Object@meta.data$direction,
+    plot_df <- data.frame(X=dim_map[rownames(Seurat_Object@meta.data),1],
+                          Y=dim_map[rownames(Seurat_Object@meta.data),2],
+                          direction = Seurat_Object@meta.data$direction,
                           group_alpha = Seurat_Object@meta.data$adhesiveness,
                           cluster_color = Seurat_Object@meta.data$Group,
                           specificity = Seurat_Object@meta.data$specificity,
@@ -2639,16 +2821,17 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
       xlab("PC1") + ylab("PC2") +
       labs(col="Cluster") +
       ggtitle("PCA with Cell Type") +
+      scale_color_brewer(palette="Dark2") +
       theme_classic(base_size = 16)
     
     p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
-      geom_point(aes_string(col="group_color", alpha="group_alpha"), size=2) +
+      geom_point(aes_string(col="direction", alpha="group_alpha"), size=2) +
       xlab("PC1") + ylab("PC2") +
       labs(col="Direction", alpha="Adhesiveness") +
       ggtitle("PCA with Direction & Adhesiveness") +
       theme_classic(base_size = 16) +
-      scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$group_color)[order(unique(plot_df$group_color))])],
-                         labels = names(cell_colors_clust[as.character(unique(plot_df$group_color)[order(unique(plot_df$group_color))])]))
+      scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])],
+                         labels = names(cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])]))
     
     ### save the plots
     g <- arrangeGrob(grobs = p,
@@ -2658,21 +2841,34 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
     ggsave(file = paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
                          "_RNAMagnet_Result_AD_", time_point, ".png"), g, width = 20, height = 12, dpi = 300)
     
+    ### draw a beeswarm plot with the adhesiveness info
+    ggplot(plot_df, aes_string(x="cluster_color", y="group_alpha")) +
+      theme_classic(base_size = 16) +
+      geom_boxplot() +
+      geom_beeswarm(aes_string(color="direction"), na.rm = TRUE) +
+      stat_compare_means() +
+      labs(x = "", y = "Adhesiveness") +
+      theme(legend.position="right")
+    ggsave(file = paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                         "_RNAMagnet_Beeswarm_AD_", time_point, ".png"), width = 20, height = 12, dpi = 300)
+    
     ### draw a scatter plot with the specificity info
     p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
       geom_point(aes_string(col="cluster_color"), size=2, alpha=0.5) +
       xlab("PC1") + ylab("PC2") +
       labs(col="Cluster") +
       ggtitle("PCA with Cell Type") +
+      scale_color_brewer(palette="Dark2") +
       theme_classic(base_size = 16)
+    
     p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
-      geom_point(aes_string(col="group_color", alpha="specificity"), size=2) +
+      geom_point(aes_string(col="direction", alpha="specificity"), size=2) +
       xlab("PC1") + ylab("PC2") +
       labs(col="Direction", alpha="Specificity Score") +
       ggtitle("PCA with Direction & Specificity Score") +
       theme_classic(base_size = 16) +
-      scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$group_color)[order(unique(plot_df$group_color))])],
-                         labels = names(cell_colors_clust[as.character(unique(plot_df$group_color)[order(unique(plot_df$group_color))])]))
+      scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])],
+                         labels = names(cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])]))
     
     ### save the plots
     g <- arrangeGrob(grobs = p,
@@ -2681,6 +2877,17 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
                      top = "")
     ggsave(file = paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
                          "_RNAMagnet_Result_SP_", time_point, ".png"), g, width = 20, height = 12, dpi = 300)
+    
+    ### draw a beeswarm plot with the adhesiveness info
+    ggplot(plot_df, aes_string(x="cluster_color", y="specificity")) +
+      theme_classic(base_size = 16) +
+      geom_boxplot() +
+      geom_beeswarm(aes_string(color="direction"), na.rm = TRUE) +
+      stat_compare_means() +
+      labs(x = "", y = "Specificity") +
+      theme(legend.position="right")
+    ggsave(file = paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                         "_RNAMagnet_Beeswarm_SP_", time_point, ".png"), width = 20, height = 12, dpi = 300)
     
     
     ### run RNAMagnet signaling
@@ -2744,56 +2951,41 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
   py_config()
   py_module_available("magic")
   
-  ### load the Seurat object and save the object name
-  tmp_env <- new.env()
-  load(paste0(Robj2_path), tmp_env)
-  obj_name <- ls(tmp_env)
-  assign("Combined_Seurat_Obj2", get(obj_name, envir = tmp_env))
-  rm(tmp_env)
-  gc()
-  
   ### check whether the orders are the same
-  print(identical(names(Idents(object = Combined_Seurat_Obj2)), rownames(Combined_Seurat_Obj2@meta.data)))
+  print(identical(names(Idents(object = Updated_Seurat_Obj)), rownames(Updated_Seurat_Obj@meta.data)))
   
-  ### run PCA
-  Combined_Seurat_Obj2 <- FindVariableFeatures(Combined_Seurat_Obj2)
-  Combined_Seurat_Obj2 <- ScaleData(Combined_Seurat_Obj2)
-  Combined_Seurat_Obj2 <- RunPCA(Combined_Seurat_Obj2, npcs = 10)
+  ### run UMAP
+  Updated_Seurat_Obj <- FindVariableFeatures(Updated_Seurat_Obj)
+  Updated_Seurat_Obj <- ScaleData(Updated_Seurat_Obj)
+  Updated_Seurat_Obj <- RunUMAP(Updated_Seurat_Obj, dims = 1:5)
   
-  ### draw a PCA
-  pca_plot <- DimPlot(Combined_Seurat_Obj2, reduction = "pca", group.by = "Cell_Type", pt.size = 1.5) +
-    labs(title = paste0("PCA_Combined_Tissue"))
-  pca_plot[[1]]$layers[[1]]$aes_params$alpha <- 0.3
-  plot(pca_plot)
+  ### draw a UMAP
+  umap_plot <- DimPlot(Updated_Seurat_Obj, reduction = "umap", group.by = "Cell_Type", pt.size = 1.5) +
+    labs(title = paste0("UMAP_Combined_Tissue"))
+  umap_plot[[1]]$layers[[1]]$aes_params$alpha <- 0.3
+  plot(umap_plot)
   
   ### set the ident of the object with the group info
-  Combined_Seurat_Obj2 <- SetIdent(object = Combined_Seurat_Obj2,
-                                   cells = rownames(Combined_Seurat_Obj2@meta.data),
-                                   value = Combined_Seurat_Obj2@meta.data$Development)
+  Updated_Seurat_Obj <- SetIdent(object = Updated_Seurat_Obj,
+                                   cells = rownames(Updated_Seurat_Obj@meta.data),
+                                   value = Updated_Seurat_Obj@meta.data$Development)
   
   ### split the Seurat obj based on the given info
-  Combined_Adult_Seurat_Obj <- subset(Combined_Seurat_Obj2, idents="ADULT")
+  Combined_Adult_Seurat_Obj <- subset(Updated_Seurat_Obj, idents="ADULT")
   
-  ### draw a PCA
-  pca_plot <- DimPlot(Combined_Adult_Seurat_Obj, reduction = "pca", group.by = "Cell_Type", pt.size = 1.5) +
-    labs(title = paste0("PCA_Combined_Adults_Only"))
-  pca_plot[[1]]$layers[[1]]$aes_params$alpha <- 0.5
-  plot(pca_plot)
-  ggsave(file = paste0(outputDir2, "PCA_Combined_Adult_Cells.png"), width = 15, height = 10, dpi = 300)
+  ### draw a UMAP
+  umap_plot <- DimPlot(Combined_Adult_Seurat_Obj, reduction = "umap", group.by = "Cell_Type", pt.size = 1.5) +
+    labs(title = paste0("UMAP_Combined_Adults_Only"))
+  umap_plot[[1]]$layers[[1]]$aes_params$alpha <- 0.5
+  plot(umap_plot)
+  ggsave(file = paste0(outputDir2, "UMAP_Combined_Adult_Cells.png"), width = 15, height = 10, dpi = 300)
   
-  ### annotate HSPC types for Heme cells
-  Combined_Adult_Seurat_Obj@meta.data$HSPC <- "Other_Heme"
-  Combined_Adult_Seurat_Obj@meta.data$HSPC[which(Combined_Adult_Seurat_Obj@meta.data$Cell_Type == "Stroma")] <- "Stroma"
-  HSPC_barcodes <- intersect(Combined_Adult_Seurat_Obj@meta.data$GexCellFull,
-                             Combined_Seurat_Obj@meta.data$GexCellFull)
-  Combined_Adult_Seurat_Obj@meta.data[HSPC_barcodes, "HSPC"] <- Combined_Seurat_Obj@meta.data[HSPC_barcodes, "HSPC"]
-  
-  ### draw a PCA
-  pca_plot <- DimPlot(Combined_Adult_Seurat_Obj, reduction = "pca", group.by = "HSPC", pt.size = 1.5) +
-    labs(title = paste0("PCA_Combined_Adults_Only"))
-  pca_plot[[1]]$layers[[1]]$aes_params$alpha <- 0.5
-  plot(pca_plot)
-  ggsave(file = paste0(outputDir2, "PCA_Combined_Adult_HSPC.png"), width = 15, height = 10, dpi = 300)
+  ### draw a UMAP
+  umap_plot <- DimPlot(Combined_Adult_Seurat_Obj, reduction = "umap", group.by = "HSPC", pt.size = 1.5) +
+    labs(title = paste0("UMAP_Combined_Adults_Only"))
+  umap_plot[[1]]$layers[[1]]$aes_params$alpha <- 0.5
+  plot(umap_plot)
+  ggsave(file = paste0(outputDir2, "UMAP_Combined_Adult_HSPC.png"), width = 15, height = 10, dpi = 300)
   
   
   ### LTHSC vs Stroma - Adult
@@ -2802,6 +2994,7 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
                                       comp1 = "LTHSC",
                                       comp2 = "Stroma",
                                       time_point = "Adult",
+                                      dim_method = "UMAP",
                                       result_dir=outputDir2)
   
   ### (STHSC, MPP2, MPP3, MPP4) vs Stroma - Adult
@@ -2810,9 +3003,277 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
                                       comp1 = c("STHSC", "MPP2", "MPP3", "MPP4"),
                                       comp2 = "Stroma",
                                       time_point = "Adult",
+                                      dim_method = "UMAP",
                                       result_dir=outputDir2)
   
+  # ******************************************************************************************
+  # Pathway Analysis with clusterProfiler package
+  # Input: geneList     = a vector of gene Entrez IDs for pathway analysis [numeric or character]
+  #        org          = organism that will be used in the analysis ["human" or "mouse"]
+  #                       should be either "human" or "mouse"
+  #        database     = pathway analysis database (KEGG or GO) ["KEGG" or "GO"]
+  #        title        = title of the pathway figure [character]
+  #        pv_threshold = pathway analysis p-value threshold (not DE analysis threshold) [numeric]
+  #        displayNum   = the number of pathways that will be displayed [numeric]
+  #                       (If there are many significant pathways show the few top pathways)
+  #        imgPrint     = print a plot of pathway analysis [TRUE/FALSE]
+  #        dir          = file directory path of the output pathway figure [character]
+  #
+  # Output: Pathway analysis results in figure - using KEGG and GO pathways
+  #         The x-axis represents the number of DE genes in the pathway
+  #         The y-axis represents pathway names
+  #         The color of a bar indicates adjusted p-value from the pathway analysis
+  #         For Pathview Result, all colored genes are found DE genes in the pathway,
+  #         and the color indicates log2(fold change) of the DE gene from DE analysis
+  # ******************************************************************************************
+  pathwayAnalysis_CP <- function(geneList,
+                                 org,
+                                 database,
+                                 title="Pathway_Results",
+                                 pv_threshold=0.05,
+                                 displayNum=Inf,
+                                 imgPrint=TRUE,
+                                 dir="./") {
+    
+    ### load library
+    if(!require(clusterProfiler, quietly = TRUE)) {
+      if (!requireNamespace("BiocManager", quietly = TRUE))
+        install.packages("BiocManager")
+      BiocManager::install("clusterProfiler")
+      require(clusterProfiler, quietly = TRUE)
+    }
+    if(!require(ggplot2)) {
+      install.packages("ggplot2")
+      library(ggplot2)
+    }
+    
+    
+    ### collect gene list (Entrez IDs)
+    geneList <- geneList[which(!is.na(geneList))]
+    
+    if(!is.null(geneList)) {
+      ### make an empty list
+      p <- list()
+      
+      if(database == "KEGG") {
+        ### KEGG Pathway
+        kegg_enrich <- enrichKEGG(gene = geneList, organism = org, pvalueCutoff = pv_threshold)
+        
+        if(is.null(kegg_enrich)) {
+          writeLines("KEGG Result does not exist")
+          return(NULL)
+        } else {
+          kegg_enrich@result <- kegg_enrich@result[which(kegg_enrich@result$p.adjust < pv_threshold),]
+          
+          if(imgPrint == TRUE) {
+            if((displayNum == Inf) || (nrow(kegg_enrich@result) <= displayNum)) {
+              result <- kegg_enrich@result
+              description <- kegg_enrich@result$Description
+            } else {
+              result <- kegg_enrich@result[1:displayNum,]
+              description <- kegg_enrich@result$Description[1:displayNum]
+            }
+            
+            if(nrow(kegg_enrich) > 0) {
+              p[[1]] <- ggplot(result, aes(x=Description, y=Count)) + labs(x="", y="Gene Counts") + 
+                theme_classic(base_size = 16) + geom_bar(aes(fill = p.adjust), stat="identity") + coord_flip() +
+                scale_x_discrete(limits = rev(description)) +
+                guides(fill = guide_colorbar(ticks=FALSE, title="P.Val", barheight=10)) +
+                ggtitle(paste0("KEGG ", title)) +
+                theme(axis.text = element_text(size = 25))
+              
+              png(paste0(dir, "kegg_", title, ".png"), width = 2000, height = 1000)
+              print(p[[1]])
+              dev.off()
+            } else {
+              writeLines("KEGG Result does not exist")
+            }
+          }
+          
+          return(kegg_enrich@result)
+        }
+      } else if(database == "GO") {
+        ### GO Pathway
+        if(org == "human") {
+          go_enrich <- enrichGO(gene = geneList, OrgDb = 'org.Hs.eg.db', readable = T, ont = "BP", pvalueCutoff = pv_threshold)
+        } else if(org == "mouse") {
+          go_enrich <- enrichGO(gene = geneList, OrgDb = 'org.Mm.eg.db', readable = T, ont = "BP", pvalueCutoff = pv_threshold)
+        } else {
+          go_enrich <- NULL
+          writeLines(paste("Unknown org variable:", org))
+        }
+        
+        if(is.null(go_enrich)) {
+          writeLines("GO Result does not exist")
+          return(NULL)
+        } else {
+          go_enrich@result <- go_enrich@result[which(go_enrich@result$p.adjust < pv_threshold),]
+          
+          if(imgPrint == TRUE) {
+            if((displayNum == Inf) || (nrow(go_enrich@result) <= displayNum)) {
+              result <- go_enrich@result
+              description <- go_enrich@result$Description
+            } else {
+              result <- go_enrich@result[1:displayNum,]
+              description <- go_enrich@result$Description[1:displayNum]
+            }
+            
+            if(nrow(go_enrich) > 0) {
+              p[[2]] <- ggplot(result, aes(x=Description, y=Count)) + labs(x="", y="Gene Counts") + 
+                theme_classic(base_size = 16) + geom_bar(aes(fill = p.adjust), stat="identity") + coord_flip() +
+                scale_x_discrete(limits = rev(description)) +
+                guides(fill = guide_colorbar(ticks=FALSE, title="P.Val", barheight=10)) +
+                ggtitle(paste0("GO ", title)) +
+                theme(axis.text = element_text(size = 25))
+              
+              png(paste0(dir, "go_", title, ".png"), width = 2000, height = 1000)
+              print(p[[2]])
+              dev.off()
+            } else {
+              writeLines("GO Result does not exist")
+            }
+          }
+          
+          return(go_enrich@result)
+        }
+      } else {
+        stop("database prameter should be \"GO\" or \"KEGG\"")
+      }
+    } else {
+      writeLines("geneList = NULL")
+    }
+  }
   
+  ### DE between two directions in Stroma
+  Seurat_Object = Combined_Adult_Seurat_Obj
+  target_col = "HSPC"
+  comp1 = "LTHSC"
+  comp2 = "Stroma"
+  time_point = "Adult"
+  dim_method = "UMAP"
+  result_dir=outputDir2
   
+  ### set output directory
+  result_dir <- paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                       "_RNAMagnet_Result/", time_point, "/")
+  dir.create(result_dir, showWarnings = FALSE, recursive = TRUE)
+  
+  ### set group info to the metadata
+  Seurat_Object@meta.data$Group <- paste0(Seurat_Object@meta.data[,target_col], "_", Seurat_Object@meta.data$Time)
+  
+  ### all the comps
+  comps <- union(paste0(comp1, "_", time_point), paste0(comp2, "_", time_point))
+  
+  ### set the ident of the object with the specified info
+  Seurat_Object <- SetIdent(object = Seurat_Object,
+                            cells = rownames(Seurat_Object@meta.data),
+                            value = Seurat_Object@meta.data$Group)
+  
+  ### only keep the specified cells
+  Seurat_Object <- subset(Seurat_Object, idents=comps)
+  
+  ### check whether the orders are the same
+  print(identical(names(Idents(object = Seurat_Object)), rownames(Seurat_Object@meta.data)))
+  
+  ### rownames in the meta.data should be in the same order as colnames in the counts
+  Seurat_Object@meta.data <- Seurat_Object@meta.data[colnames(Seurat_Object@assays$RNA@counts),]
+  
+  ### test
+  # Seurat_Object <- subset(Seurat_Object, cells = rownames(Seurat_Object@meta.data)[which(Seurat_Object@reductions$pca@cell.embeddings[,"PC_2"] < 0)])
+  
+  ### preprocessing
+  Seurat_Object <- FindVariableFeatures(Seurat_Object)
+  Seurat_Object <- ScaleData(Seurat_Object)
+  
+  ### run PCA/UMAP
+  if(dim_method == "PCA") {
+    Seurat_Object <- RunPCA(Seurat_Object, npcs = 15)
+    dim_map <- Embeddings(Seurat_Object, reduction = "pca")[rownames(Seurat_Object@meta.data),]
+  } else if(dim_method == "UMAP") {
+    Seurat_Object <- RunUMAP(Seurat_Object, dims = 1:15)
+    dim_map <- Embeddings(Seurat_Object, reduction = "umap")[rownames(Seurat_Object@meta.data),]
+  } else {
+    stop("ERROR: dim_method not PCA nor UMAP.")
+  }
+  
+  ### run RNAMagnet with anchors
+  result <- RNAMagnetAnchors(Seurat_Object,
+                             anchors = unique(Seurat_Object@meta.data$Group))
+  
+  ### add RNAMagnet info to the seurat object
+  Seurat_Object@meta.data$direction <- as.character(result[rownames(Seurat_Object@meta.data),"direction"])
+  Seurat_Object@meta.data$adhesiveness <- as.numeric(result[rownames(Seurat_Object@meta.data),"adhesiveness"])
+  Seurat_Object@meta.data$specificity <- as.numeric(sapply(rownames(Seurat_Object@meta.data), function(x) {
+    result[x, result[x,"direction"]]
+  }))
+  
+  ### check the order
+  print(identical(rownames(Seurat_Object@meta.data), rownames(dim_map)))
+  
+  ### set the ident of the object with the Cell Type
+  Seurat_Object <- SetIdent(object = Seurat_Object,
+                            cells = rownames(Seurat_Object@meta.data),
+                            value = Seurat_Object@meta.data$Cell_Type)
+  
+  ### only keep the specified cells
+  Seurat_Object <- subset(Seurat_Object, idents="Stroma")
+  
+  ### set the ident of the object with the Cell Type
+  Seurat_Object <- SetIdent(object = Seurat_Object,
+                            cells = rownames(Seurat_Object@meta.data),
+                            value = Seurat_Object@meta.data$direction)
+  
+  ### get DE genes between two groups
+  de_result <- FindMarkers(object = Seurat_Object, test.use = "wilcox",
+                           ident.1 = "LTHSC_Adult", ident.2 = "Stroma_Adult",
+                           logfc.threshold = 0, min.pct = 0.1)
+  
+  ### order the DE reuslt
+  de_result <- de_result[order(de_result$p_val_adj),]
+  
+  ### data frame
+  de_result <- data.frame(Gene_Symbol=rownames(de_result),
+                          de_result,
+                          stringsAsFactors = FALSE, check.names = FALSE)
+  
+  ### write out the DE result
+  write.xlsx2(de_result,
+              file = paste0(result_dir,
+                            paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                            "_RNAMagnet_DE_Result_", time_point, ".xlsx"),
+              sheetName = "DE_Result",
+              row.names = FALSE)
+  
+  ### pathway analysis
+  pathway_result_GO <- pathwayAnalysis_CP(geneList = mapIds(org.Mm.eg.db,
+                                                            de_result[which(de_result$p_val_adj < 1e-100),
+                                                                      "Gene_Symbol"],
+                                                            "ENTREZID", "SYMBOL"),
+                                          org = "mouse", database = "GO",
+                                          title = paste0(paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                                                         "_RNAMagnet_Pathway_Result"),
+                                          displayNum = 30, imgPrint = TRUE,
+                                          dir = paste0(result_dir))
+  pathway_result_KEGG <- pathwayAnalysis_CP(geneList = mapIds(org.Mm.eg.db,
+                                                              de_result[which(de_result$p_val_adj < 1e-100),
+                                                                        "Gene_Symbol"],
+                                                              "ENTREZID", "SYMBOL"),
+                                            org = "mouse", database = "KEGG",
+                                            title = paste0(paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                                                           "_RNAMagnet_Pathway_Result"),
+                                            displayNum = 30, imgPrint = TRUE,
+                                            dir = paste0(result_dir))
+  if(!is.null(pathway_result_GO) && nrow(pathway_result_GO) > 0) {
+    write.xlsx2(pathway_result_GO, file = paste0(result_dir,
+                                                 paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                                                 "_RNAMagnet_GO_Result_", time_point, ".xlsx"),
+                row.names = FALSE, sheetName = paste0("GO_Results"))
+  }
+  if(!is.null(pathway_result_KEGG) && nrow(pathway_result_KEGG) > 0) {
+    write.xlsx2(pathway_result_KEGG, file = paste0(result_dir,
+                                                   paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                                                   "_RNAMagnet_KEGG_Result_", time_point, ".xlsx"),
+                row.names = FALSE, sheetName = paste0("KEGG_Results"))
+  }
   
 }
