@@ -2958,7 +2958,7 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
   Updated_Seurat_Obj <- ScaleData(Updated_Seurat_Obj)
   Updated_Seurat_Obj <- RunUMAP(Updated_Seurat_Obj, dims = 1:5)
   
-  ### draw a UMAP
+  ### draw a UMAP with cell type
   umap_plot <- DimPlot(Updated_Seurat_Obj, reduction = "umap", group.by = "Cell_Type", pt.size = 1.5) +
     labs(title = paste0("UMAP_Combined_Tissue"))
   umap_plot[[1]]$layers[[1]]$aes_params$alpha <- 0.3
@@ -2972,20 +2972,27 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
   ### split the Seurat obj based on the given info
   Combined_Adult_Seurat_Obj <- subset(Updated_Seurat_Obj, idents="ADULT")
   
-  ### draw a UMAP
+  ### draw a UMAP with cell type
   umap_plot <- DimPlot(Combined_Adult_Seurat_Obj, reduction = "umap", group.by = "Cell_Type", pt.size = 1.5) +
     labs(title = paste0("UMAP_Combined_Adults_Only"))
   umap_plot[[1]]$layers[[1]]$aes_params$alpha <- 0.5
   plot(umap_plot)
   ggsave(file = paste0(outputDir2, "UMAP_Combined_Adult_Cells.png"), width = 15, height = 10, dpi = 300)
   
-  ### draw a UMAP
+  ### draw a UMAP with HSPC info
   umap_plot <- DimPlot(Combined_Adult_Seurat_Obj, reduction = "umap", group.by = "HSPC", pt.size = 1.5) +
     labs(title = paste0("UMAP_Combined_Adults_Only"))
   umap_plot[[1]]$layers[[1]]$aes_params$alpha <- 0.5
   plot(umap_plot)
   ggsave(file = paste0(outputDir2, "UMAP_Combined_Adult_HSPC.png"), width = 15, height = 10, dpi = 300)
   
+  ### draw a UMAP with Trent's annotation
+  Combined_Adult_Seurat_Obj@meta.data$Annotation <- factor(Combined_Adult_Seurat_Obj@meta.data$Annotation)
+  umap_plot <- DimPlot(Combined_Adult_Seurat_Obj, reduction = "umap", group.by = "Annotation", pt.size = 1.5) +
+    labs(title = paste0("UMAP_Combined_Adult_With_the_Annotation"))
+  umap_plot[[1]]$layers[[1]]$aes_params$alpha <- 0.5
+  umap_plot <- LabelClusters(plot = umap_plot, id = "Annotation", col = "black")
+  ggsave(file = paste0(outputDir2, "UMAP_Combined_Adult_With_the_Annotation.png"), width = 15, height = 10, dpi = 300)
   
   ### LTHSC vs Stroma - Adult
   merge_heme_stroma_and_run_rnamagnet(Seurat_Object = Combined_Adult_Seurat_Obj,
