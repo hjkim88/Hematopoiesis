@@ -3215,6 +3215,16 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
     stop("ERROR: dim_method not PCA nor UMAP.")
   }
   
+  ### draw a UMAP with Trent's annotation
+  Seurat_Object@meta.data$Annotation <- factor(Seurat_Object@meta.data$Annotation)
+  umap_plot <- DimPlot(Seurat_Object, reduction = "umap", group.by = "Annotation", pt.size = 1.5) +
+    labs(title = paste0("UMAP_Combined_Adult_With_the_Annotation"))
+  umap_plot[[1]]$layers[[1]]$aes_params$alpha <- 0.5
+  umap_plot <- LabelClusters(plot = umap_plot, id = "Annotation", col = "black")
+  ggsave(file = paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                       "_UMAP_with_the_annotation_", time_point, ".png"),
+         width = 15, height = 10, dpi = 300)
+  
   ### run RNAMagnet with anchors
   ### Warning: the Idents(Seurat_Object) should be along with the given 'anchors' input
   ### Another ERROR:
