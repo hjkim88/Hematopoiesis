@@ -4,7 +4,7 @@
 #   Date      : Nov 18, 2020
 #   Email     : hyunjin.kim@stjude.org
 #   Purpose   : Perform additional analyses for Trent's project based on the
-#               "20201117 Meeting.txt".
+#               "20201119 RNA-Magnet notes for Hyunjin.txt".
 #   
 #   Instruction
 #               1. Source("Additional_Analysis_Oct_2020.R")
