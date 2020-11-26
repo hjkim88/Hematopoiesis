@@ -144,6 +144,118 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     ### split the Seurat obj based on the given info
     SO <- subset(SO, idents=conds)
     
+    ### run UMAP
+    SO <- RunUMAP(SO, dims = 1:15)
+    dim_map <- Embeddings(SO, reduction = "umap")[rownames(SO@meta.data),]
+    
+    ### run RNAMagnet with anchors
+    result <- RNAMagnetAnchors(SO,
+                               anchors = unique(SO@meta.data[,target_col]))
+    
+    ### write the result as an Excel file
+    write.xlsx2(data.frame(Cell=rownames(result), result,
+                           stringsAsFactors = FALSE, check.names = FALSE),
+                file = paste0(result_dir, paste(conds, collapse = "_vs_"),
+                              "_RNAMagnet_Result.xlsx"),
+                sheetName = paste0("RNAMagnet_Result"),
+                row.names = FALSE)
+    
+    ### add RNAMagnet info to the seurat object
+    SO@meta.data$direction <- as.character(result[rownames(SO@meta.data),"direction"])
+    SO@meta.data$adhesiveness <- as.numeric(result[rownames(SO@meta.data),"adhesiveness"])
+    SO@meta.data$specificity <- as.numeric(sapply(rownames(SO@meta.data), function(x) {
+      result[x, result[x,"direction"]]
+    }))
+    
+    ### make a data frame for ggplot
+    plot_df <- data.frame(X=dim_map[rownames(SO@meta.data),1],
+                          Y=dim_map[rownames(SO@meta.data),2],
+                          direction = SO@meta.data$direction,
+                          group_alpha = SO@meta.data$adhesiveness,
+                          cluster_color = SO@meta.data$Group,
+                          specificity = SO@meta.data$specificity,
+                          stringsAsFactors = FALSE, check.names = FALSE)
+    
+    ### get colors for the clustering result
+    cell_colors_clust <- cell_pal(unique(SO@meta.data[,target_col]), hue_pal())
+    
+    ### scatter plot
+    p <- list()
+    
+    ### draw a scatter plot with the adhesiveness info
+    p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="cluster_color"), size=2, alpha=0.5) +
+      xlab("PC1") + ylab("PC2") +
+      labs(col="Cluster") +
+      ggtitle(paste0("UMAP with Cell Type")) +
+      scale_color_brewer(palette="Dark2") +
+      theme_classic(base_size = 16)
+    
+    p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="direction", alpha="group_alpha"), size=2) +
+      xlab("PC1") + ylab("PC2") +
+      labs(col="Direction", alpha="Adhesiveness") +
+      ggtitle(paste("UMAP with Direction & Adhesiveness")) +
+      theme_classic(base_size = 16) +
+      scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])],
+                         labels = names(cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])]))
+    
+    ### save the plots
+    g <- arrangeGrob(grobs = p,
+                     nrow = 2,
+                     ncol = 1,
+                     top = "")
+    ggsave(file = paste0(result_dir, paste(conds, collapse = "_vs_"),
+                         "_RNAMagnet_Result_AD.png"), g, width = 20, height = 12, dpi = 300)
+    
+    ### draw a beeswarm plot with the adhesiveness info
+    ggplot(plot_df, aes_string(x="cluster_color", y="group_alpha")) +
+      theme_classic(base_size = 16) +
+      geom_boxplot() +
+      geom_beeswarm(aes_string(color="direction"), na.rm = TRUE) +
+      stat_compare_means() +
+      labs(x = "", y = "Adhesiveness") +
+      theme(legend.position="right")
+    ggsave(file = paste0(result_dir, paste(conds, collapse = "_vs_"),
+                         "_RNAMagnet_Beeswarm_AD.png"), width = 20, height = 12, dpi = 300)
+    
+    ### draw a scatter plot with the specificity info
+    p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="cluster_color"), size=2, alpha=0.5) +
+      xlab("PC1") + ylab("PC2") +
+      labs(col="Cluster") +
+      ggtitle(paste("UMAP with Cell Type")) +
+      scale_color_brewer(palette="Dark2") +
+      theme_classic(base_size = 16)
+    
+    p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="direction", alpha="specificity"), size=2) +
+      xlab("PC1") + ylab("PC2") +
+      labs(col="Direction", alpha="Specificity Score") +
+      ggtitle(paste("UMAP with Direction & Specificity Score")) +
+      theme_classic(base_size = 16) +
+      scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])],
+                         labels = names(cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])]))
+    
+    ### save the plots
+    g <- arrangeGrob(grobs = p,
+                     nrow = 2,
+                     ncol = 1,
+                     top = "")
+    ggsave(file = paste0(result_dir, paste(conds, collapse = "_vs_"),
+                         "_RNAMagnet_Result_SP.png"), g, width = 20, height = 12, dpi = 300)
+    
+    ### draw a beeswarm plot with the adhesiveness info
+    ggplot(plot_df, aes_string(x="cluster_color", y="specificity")) +
+      theme_classic(base_size = 16) +
+      geom_boxplot() +
+      geom_beeswarm(aes_string(color="direction"), na.rm = TRUE) +
+      stat_compare_means() +
+      labs(x = "", y = "Specificity") +
+      theme(legend.position="right")
+    ggsave(file = paste0(result_dir, paste(conds, collapse = "_vs_"),
+                         "_RNAMagnet_Beeswarm_SP.png"), width = 20, height = 12, dpi = 300)
+    
     ### run RNAMagnet signaling
     result <- RNAMagnetSignaling(SO)
     
@@ -212,5 +324,14 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
                                target_col = "Annotation2",
                                conds = c("LTHSC", "F-5"),
                                result_dir = outputDir2)
+  
+  
+  ### RNAMagnet for the following:
+  ### E16.5 LT-HSCs vs E16.5 Stroma
+  ### E18.5 LT-HSCs vs E18.5 Stroma
+  ### P0 LT-HSCs vs P0 Stroma
+  
+  
+  
   
 }
