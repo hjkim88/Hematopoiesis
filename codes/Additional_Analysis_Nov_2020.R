@@ -49,6 +49,22 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     install.packages("Rmagic")
     require(Rmagic, quietly = TRUE)
   }
+  if(!require(scales, quietly = TRUE)) {
+    install.packages("scales")
+    library(scales, quietly = TRUE)
+  }
+  if(!require(gridExtra, quietly = TRUE)) {
+    install.packages("gridExtra")
+    require(gridExtra, quietly = TRUE)
+  }
+  if(!require(ggbeeswarm, quietly = TRUE)) {
+    install.packages("ggbeeswarm")
+    require(ggbeeswarm, quietly = TRUE)
+  }
+  if(!require(ggpubr, quietly = TRUE)) {
+    install.packages("ggpubr")
+    require(ggpubr, quietly = TRUE)
+  }
   
   ### result directory
   outputDir2 <- paste0(outputDir, "RNA_Magnet/")
@@ -129,12 +145,27 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   Combined_Adult_Seurat_Obj@meta.data$Annotation2[which(Combined_Adult_Seurat_Obj@meta.data$HSPC == "LTHSC")] <- "LTHSC"
   Combined_Adult_Seurat_Obj@meta.data$Annotation2[which(Combined_Adult_Seurat_Obj@meta.data$Annotation2 == "Stroma")] <- as.character(Combined_Adult_Seurat_Obj@meta.data$Annotation[which(Combined_Adult_Seurat_Obj@meta.data$Annotation2 == "Stroma")])
   
+  ### a function for color brewer
+  cell_pal <- function(cell_vars, pal_fun) {
+    if (is.numeric(cell_vars)) {
+      pal <- pal_fun(100)
+      return(pal[cut(cell_vars, breaks = 100)])
+    } else {
+      categories <- sort(unique(cell_vars))
+      pal <- setNames(pal_fun(length(categories)), categories)
+      return(pal[cell_vars])
+    }
+  }
+  
   ### simply run RNAMagnet only to get signaling interactions
   ### SO: Seurat object
   ### target_col: Target column name of the given seurat object's meta.data
   ### conds: a character vector of all the conditions in the 'target_col' that will be used
   ### result_dir: output directory
   simple_RNAMagnet_interaction <- function(SO, target_col, conds, result_dir) {
+    
+    result_dir <- paste0(result_dir, "/", paste(conds, collapse = "_vs_"), "/")
+    dir.create(result_dir, showWarnings = FALSE, recursive = TRUE)
     
     ### set the ident of the object with the HSPC type
     SO <- SetIdent(object = SO,
@@ -171,8 +202,8 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     plot_df <- data.frame(X=dim_map[rownames(SO@meta.data),1],
                           Y=dim_map[rownames(SO@meta.data),2],
                           direction = SO@meta.data$direction,
-                          group_alpha = SO@meta.data$adhesiveness,
-                          cluster_color = SO@meta.data$Group,
+                          adhesiveness = SO@meta.data$adhesiveness,
+                          cluster_color = SO@meta.data[,target_col],
                           specificity = SO@meta.data$specificity,
                           stringsAsFactors = FALSE, check.names = FALSE)
     
@@ -192,7 +223,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
       theme_classic(base_size = 16)
     
     p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
-      geom_point(aes_string(col="direction", alpha="group_alpha"), size=2) +
+      geom_point(aes_string(col="direction", alpha="adhesiveness"), size=2) +
       xlab("PC1") + ylab("PC2") +
       labs(col="Direction", alpha="Adhesiveness") +
       ggtitle(paste("UMAP with Direction & Adhesiveness")) +
@@ -209,7 +240,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
                          "_RNAMagnet_Result_AD.png"), g, width = 20, height = 12, dpi = 300)
     
     ### draw a beeswarm plot with the adhesiveness info
-    ggplot(plot_df, aes_string(x="cluster_color", y="group_alpha")) +
+    ggplot(plot_df, aes_string(x="cluster_color", y="adhesiveness")) +
       theme_classic(base_size = 16) +
       geom_boxplot() +
       geom_beeswarm(aes_string(color="direction"), na.rm = TRUE) +
@@ -279,8 +310,6 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     colnames(interaction_list) <- c("Ligand_Cluster", "Receptor_Cluster", "Interaction_Score", "Interaction_Pair")
     
     ### write out the interaction list
-    result_dir <- paste0(result_dir, "/", paste(conds, collapse = "_vs_"), "/")
-    dir.create(result_dir, showWarnings = FALSE, recursive = TRUE)
     write.xlsx2(interaction_list,
                 file = paste0(result_dir, paste(conds, collapse = "_vs_"),
                               "_Signaling_RNAMagnet_Interaction_List.xlsx"),
@@ -339,7 +368,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
                                target_col = "HSPC",
                                conds = c("LTHSC", "Stroma"),
-                               result_dir = outputDir2)
+                               result_dir = paste0(outputDir2, "E16.5"))
   
   ### E18.5 LT-HSCs vs E18.5 Stroma
   ### split the Seurat obj based on the given info
@@ -349,7 +378,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
                                target_col = "HSPC",
                                conds = c("LTHSC", "Stroma"),
-                               result_dir = outputDir2)
+                               result_dir = paste0(outputDir2, "E18.5"))
   
   ### P0 LT-HSCs vs P0 Stroma
   ### split the Seurat obj based on the given info
@@ -359,8 +388,70 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
                                target_col = "HSPC",
                                conds = c("LTHSC", "Stroma"),
-                               result_dir = outputDir2)
+                               result_dir = paste0(outputDir2, "P0"))
   
+  ### #3 analysis
+  
+  third_analysis <- function(Seurat_Object = Updated_Seurat_Obj,
+                             target_col = "HSPC",
+                             comp1 = "LTHSC",
+                             comp2 = "Stroma",
+                             time_point = "Adult",
+                             dim_method = "UMAP",
+                             result_dir=outputDir2) {
+    
+    ### set output directory
+    result_dir <- paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                         "_RNAMagnet_Result/", time_point, "/")
+    dir.create(result_dir, showWarnings = FALSE, recursive = TRUE)
+    
+    ### set group info to the metadata
+    Seurat_Object@meta.data$Group <- paste0(Seurat_Object@meta.data[,target_col], "_", Seurat_Object@meta.data$Time)
+    
+    ### all the comps
+    comps <- union(paste0(comp1, "_", time_point), paste0(comp2, "_", time_point))
+    
+    ### set the ident of the object with the specified info
+    Seurat_Object <- SetIdent(object = Seurat_Object,
+                              cells = rownames(Seurat_Object@meta.data),
+                              value = Seurat_Object@meta.data$Group)
+    
+    ### only keep the specified cells
+    Seurat_Object <- subset(Seurat_Object, idents=comps)
+    
+    ### check whether the orders are the same
+    print(identical(names(Idents(object = Seurat_Object)), rownames(Seurat_Object@meta.data)))
+    
+    ### rownames in the meta.data should be in the same order as colnames in the counts
+    Seurat_Object@meta.data <- Seurat_Object@meta.data[colnames(Seurat_Object@assays$RNA@counts),]
+    
+    ### preprocessing
+    Seurat_Object <- FindVariableFeatures(Seurat_Object)
+    Seurat_Object <- ScaleData(Seurat_Object)
+    
+    ### run PCA/UMAP
+    if(dim_method == "PCA") {
+      Seurat_Object <- RunPCA(Seurat_Object, npcs = 15)
+      dim_map <- Embeddings(Seurat_Object, reduction = "pca")[rownames(Seurat_Object@meta.data),]
+    } else if(dim_method == "UMAP") {
+      Seurat_Object <- RunUMAP(Seurat_Object, dims = 1:15)
+      dim_map <- Embeddings(Seurat_Object, reduction = "umap")[rownames(Seurat_Object@meta.data),]
+    } else {
+      stop("ERROR: dim_method not PCA nor UMAP.")
+    }
+    
+    ### draw a UMAP with Trent's annotation
+    Seurat_Object@meta.data$Annotation <- factor(Seurat_Object@meta.data$Annotation)
+    umap_plot <- DimPlot(Seurat_Object, reduction = "umap", group.by = "Annotation", pt.size = 1.5) +
+      labs(title = paste0("UMAP_Combined_Adult_With_the_Annotation"))
+    umap_plot[[1]]$layers[[1]]$aes_params$alpha <- 0.5
+    umap_plot <- LabelClusters(plot = umap_plot, id = "Annotation", col = "black")
+    ggsave(file = paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                         "_UMAP_with_the_annotation_", time_point, ".png"),
+           width = 15, height = 10, dpi = 300)
+    
+    
+  }
   
   
   
