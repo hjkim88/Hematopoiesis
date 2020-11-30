@@ -331,6 +331,36 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   ### E18.5 LT-HSCs vs E18.5 Stroma
   ### P0 LT-HSCs vs P0 Stroma
   
+  ### E16.5 LT-HSCs vs E16.5 Stroma
+  ### split the Seurat obj based on the given info
+  Combined_Adult_Seurat_Obj <- subset(Updated_Seurat_Obj, idents="E16")
+  
+  ### run the RNAMagnet wrapper function
+  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
+                               target_col = "HSPC",
+                               conds = c("LTHSC", "Stroma"),
+                               result_dir = outputDir2)
+  
+  ### E18.5 LT-HSCs vs E18.5 Stroma
+  ### split the Seurat obj based on the given info
+  Combined_Adult_Seurat_Obj <- subset(Updated_Seurat_Obj, idents="E18")
+  
+  ### run the RNAMagnet wrapper function
+  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
+                               target_col = "HSPC",
+                               conds = c("LTHSC", "Stroma"),
+                               result_dir = outputDir2)
+  
+  ### P0 LT-HSCs vs P0 Stroma
+  ### split the Seurat obj based on the given info
+  Combined_Adult_Seurat_Obj <- subset(Updated_Seurat_Obj, idents="P0")
+  
+  ### run the RNAMagnet wrapper function
+  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
+                               target_col = "HSPC",
+                               conds = c("LTHSC", "Stroma"),
+                               result_dir = outputDir2)
+  
   
   
   
