@@ -101,6 +101,18 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   Updated_Seurat_Obj <- ScaleData(Updated_Seurat_Obj)
   Updated_Seurat_Obj <- RunUMAP(Updated_Seurat_Obj, dims = 1:5)
   
+  ### a function for color brewer
+  cell_pal <- function(cell_vars, pal_fun) {
+    if (is.numeric(cell_vars)) {
+      pal <- pal_fun(100)
+      return(pal[cut(cell_vars, breaks = 100)])
+    } else {
+      categories <- sort(unique(cell_vars))
+      pal <- setNames(pal_fun(length(categories)), categories)
+      return(pal[cell_vars])
+    }
+  }
+  
   ### set the ident of the object with the group info
   Updated_Seurat_Obj <- SetIdent(object = Updated_Seurat_Obj,
                                  cells = rownames(Updated_Seurat_Obj@meta.data),
@@ -144,18 +156,6 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   Combined_Adult_Seurat_Obj@meta.data$Annotation2 <- Combined_Adult_Seurat_Obj@meta.data$Cell_Type
   Combined_Adult_Seurat_Obj@meta.data$Annotation2[which(Combined_Adult_Seurat_Obj@meta.data$HSPC == "LTHSC")] <- "LTHSC"
   Combined_Adult_Seurat_Obj@meta.data$Annotation2[which(Combined_Adult_Seurat_Obj@meta.data$Annotation2 == "Stroma")] <- as.character(Combined_Adult_Seurat_Obj@meta.data$Annotation[which(Combined_Adult_Seurat_Obj@meta.data$Annotation2 == "Stroma")])
-  
-  ### a function for color brewer
-  cell_pal <- function(cell_vars, pal_fun) {
-    if (is.numeric(cell_vars)) {
-      pal <- pal_fun(100)
-      return(pal[cut(cell_vars, breaks = 100)])
-    } else {
-      categories <- sort(unique(cell_vars))
-      pal <- setNames(pal_fun(length(categories)), categories)
-      return(pal[cell_vars])
-    }
-  }
   
   ### simply run RNAMagnet only to get signaling interactions
   ### SO: Seurat object
@@ -390,6 +390,142 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
                                conds = c("LTHSC", "Stroma"),
                                result_dir = paste0(outputDir2, "P0"))
   
+  
+  #'Low-level function to run core RNA magnet steps
+  #'
+  #' Users are advised to use the top-level functions \code{\link{RNAMagnetAnchors}} and \code{\link{RNAMagnetSignaling}} which appropriately set default parameters and return user-friendly return values.
+  #' This is a low level function for development purposes.
+  #'@param seurat An object of class \code{\link[Seurat]{seurat}} containing a valid clustering and t-SNE information
+  #'
+  #'. For information on how to create such an object, see https://satijalab.org/seurat/get_started.html
+  #'@param anchors A character vector of anchor populations. Entries must be levels of the seurat identity vector. If \code{NULL}: All entries of the seurat identity vector are used as anchors.
+  #'@param neighborhood.distance See \code{\link{RNAMagnetAnchors}}
+  #'@param neighborhood.gradient See \code{\link{RNAMagnetAnchors}}
+  #'@param .k Fuzzification parameter, see detail. Recommended to leave at the default value.
+  #'@param .x0 Fuzzification parameter, see detail. Recommended to leave at the default value.
+  #'@param .minExpression Minimal expression level of genes to be included, specified as the number of cells in the dataset that express the gene.
+  #'@param .minMolecules Number of molecules per cell required to count the cells as positive.
+  #'@param .version The version of the underlying ligand-receptor database. See \code{\link{getLigandsReceptors}}.
+  #'@param .cellularCompartment Types of ligands to be included. For physical interactions, defaults to \code{ c("Membrane","ECM","Both")}.  See \code{\link{getLigandsReceptors}}.
+  #'@param .manualAnnotation Annotation status of ligands to be included. Default to \code{"Correct"}. See \code{\link{getLigandsReceptors}}.
+  #'@param .symmetric Assume that if A is a receptor for B, B is also a receptor for A
+  #'@details The algorithm takes the following steps: \enumerate{
+  #'\item Ligand-receptor pairs are selected based on the parameters \code{.version}, \code{.cellularCompartment} and \code{.manualAnnotation}. Choice of \code{.cellularCompartment} is crucial for determining the algorithm's behavior, e.g. if set to \code{c("Secreted","Both")}, paracrine signaling interactions involving soluble ligands are investigated.
+  #'\item Dropout values in the expression levels of ligands and receptors are imputed using \code{\link[Rmagic]{magic}}
+  #'\item Mean expression level of ligands and receptors is computed for all anchor populations
+  #'\item For each cell or anchor population, the expression of each ligand and receptor is encoded as a fuzzy logic variable
+  #'\item Fuzzy logic AND is used to compute probabilities for a given interaction to be active between a single cell and an anchor population
+  #'\item An interaction score is computed as the sum of interaction probabilities across all possible ligand-receptor pairs
+  #'\item Specificty scores are computed by comparing interaction scores to average interaction scores in a local neighborhood.
+  #'}
+  #'@details Add the methods section of the paper here!
+  #'@return Returns an object of class \code{\link{rnamagnet}}
+  #'@export
+  RNAMagnetBase <- function(seurat, anchors=NULL,neighborhood.distance=NULL, neighborhood.gradient =NULL, .k = 10, .x0 = 0.5, .minExpression,.minMolecules=1, .version = "1.0.0", .cellularCompartment, .manualAnnotation = "Correct", .symmetric = F) {
+    cat("Setting everything up...\n")
+    
+    if (grepl("^3", Biobase::package.version("Seurat"))) {
+      seurat.ident <- Idents(seurat)
+      seurat.cell.names <- colnames(seurat)
+      seurat.pca <- Embeddings(seurat, reduction = "pca")
+      seurat.raw.data <- GetAssayData(seurat, slot = "counts")
+      
+    } else {
+      seurat.ident <- seurat@ident
+      seurat.cell.names <- seurat@cell.names
+      seurat.pca <- seurat@dr$pca@cell.embeddings
+      seurat.raw.data <- seurat@raw.data
+    }
+    
+    if (is.null(anchors)) anchors <- as.character(unique(seurat.ident))
+    
+    out <- new("rnamagnet", celltype = seurat.ident, params = list("neighborhood.distance"=neighborhood.distance, "neighborhood.gradient" =neighborhood.gradient, ".k" = .k, ".x0" = .x0, ".minExpression" = .minExpression, ".minMolecules" = .minMolecules, ".cellularCompartment" = .cellularCompartment, ".manualAnnotation" = .manualAnnotation, ".symmetric" = .symmetric))
+    
+    #compute cell-cell similarity
+    similarity <- as.matrix(1-cor(t(seurat.pca[,1:15])))
+    
+    #prepare database
+    ligrec <- getLigandsReceptors(.version, .cellularCompartment, .manualAnnotation)
+    if (.symmetric) ligrec <- makeSymmetric(ligrec) #for physical interactions: i a binds b, b binds a.
+    
+    
+    #prepare genes included into MAGIC
+    filteredGenes <- rownames(seurat.raw.data)[apply(seurat.raw.data[,seurat.cell.names] >=.minMolecules ,1,sum) > .minExpression]
+    
+    genes <- unique(c(ligrec$Receptor.Mouse,
+                      ligrec$Ligand.Mouse))
+    
+    genes <- genes[sapply(genes, function(x) {
+      entries <- strsplit(x, "[&|]")
+      if (grepl("&", x))
+        all(entries[[1]] %in% filteredGenes)
+      else any(entries[[1]] %in% filteredGenes)
+    })]
+    
+    genes_formagic <- unlist(strsplit( genes,"[&|]"))
+    
+    
+    formagic <- Matrix::t(seurat.raw.data[,seurat.cell.names])
+    formagic <- Rmagic::library.size.normalize(formagic)
+    formagic <- sqrt(formagic)
+    
+    #Run MAGIC
+    cat("Now running MAGIC to impute dropout values...\n")
+    mymagic <- Rmagic::magic(formagic, genes = genes_formagic, seed = 0xbeef)
+    mymagic <- as.data.frame(mymagic)
+    
+    #handle expression levels of heterodimers
+    resolvedRawData <- resolveData(t(mymagic), genes)
+    resolvedRawData <- t(apply(resolvedRawData, 1, function(x) (x - min(x )) / (max(x) - min(x)) ))
+    
+    
+    annotated_genes <- rownames(resolvedRawData)
+    out@mylr <- subset(ligrec, Receptor.Mouse %in% annotated_genes &
+                         Ligand.Mouse %in% annotated_genes)
+    
+    stepf<- Vectorize(function(x) if (x<0) 0 else x)
+    
+    cat("Now running RNAMagnet...\n")
+    
+    #compute mean gene expression level per population
+    out@anchors <- do.call(cbind, lapply(anchors, function(id) {
+      apply(resolvedRawData[,seurat.ident == id,drop=FALSE],1,mean)
+    }));
+    colnames(out@anchors) <- anchors
+    
+    #use fuzzy logic and operations to compute interaction score
+    out@interaction <- sapply(anchors, function(pop_l) {
+      out@mylr$expression_ligand <- out@anchors[out@mylr$Ligand.Mouse, pop_l]
+      sapply(seurat.cell.names, function(cell_r) {
+        out@mylr$expression_receptor <-resolvedRawData[out@mylr$Receptor.Mouse, cell_r]
+        sum(kernel(out@mylr$expression_ligand, k =.k, x0 = .x0) * kernel(out@mylr$expression_receptor, k = .k, x0=.x0 )) #kernel performs fuzzification
+      })
+    })
+    ### sometimes this is missing
+    colnames(out@interaction) <- anchors
+    
+    out@specificity <- t(sapply(rownames(out@interaction), function(cell) {
+      x <- out@interaction[cell,]
+      beta <- x/sum(x)
+      if (!is.null(neighborhood.distance)) alpha <- apply(out@interaction * (1-kernel(similarity[cell,],neighborhood.gradient,x0=neighborhood.distance )),2,sum) else alpha <- apply(out@interaction,2,mean)
+      alpha <- alpha / sum(alpha)
+      beta- alpha
+    }))
+    rownames(out@specificity) <- rownames(out@interaction)
+    
+    out@adhesiveness <- apply(mymagic, 1,function(x) sum(kernel(x,x0 = .x0, k = .k)))
+    return(out)
+    
+  }
+  
+  ### RNAMagnetAnchors
+  RNAMagnetAnchors <- function(seurat, anchors, return = "summary", neighborhood.distance = 0.7, neighborhood.gradient = 3, .k = 10, .x0 = 0.5, .minExpression = 0, .minMolecules = 1, .version = "1.0.0", .cellularCompartment = c("Membrane","ECM","Both"), .manualAnnotation = "Correct" ) {
+    
+    myMagnet <- RNAMagnetBase(seurat, anchors, neighborhood.distance,neighborhood.gradient, .k, .x0, .minExpression, .minMolecules, .version, .cellularCompartment, .manualAnnotation,TRUE)
+    if (return=="rnamagnet-class") myMagnet else data.frame(direction = as.factor(colnames(myMagnet@specificity)[apply(myMagnet@specificity,1,which.max)]), adhesiveness = myMagnet@adhesiveness, myMagnet@specificity[,anchors])
+    
+  }
+  
   ### #3 analysis
   
   ### a function for the third analysis
@@ -407,7 +543,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     dir.create(result_dir, showWarnings = FALSE, recursive = TRUE)
     
     ### set group info to the metadata
-    Seurat_Object@meta.data$Group <- paste0(Seurat_Object@meta.data[,target_col], "_", Seurat_Object@meta.data$Time)
+    Seurat_Object@meta.data$Group <- paste0(Seurat_Object@meta.data[,target_col], "_", Seurat_Object@meta.data$Development)
     
     ### all the comps
     comps <- union(paste0(comp1, "_", time_point), paste0(comp2, "_", time_point))
@@ -431,9 +567,13 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     if(dim_method == "PCA") {
       Seurat_Object <- RunPCA(Seurat_Object, npcs = 15)
       dim_map <- Embeddings(Seurat_Object, reduction = "pca")[rownames(Seurat_Object@meta.data),]
+      x_lab <- "PC1"
+      y_lab <- "PC2"
     } else if(dim_method == "UMAP") {
       Seurat_Object <- RunUMAP(Seurat_Object, dims = 1:15)
       dim_map <- Embeddings(Seurat_Object, reduction = "umap")[rownames(Seurat_Object@meta.data),]
+      x_lab <- "UMAP1"
+      y_lab <- "UMAP2"
     } else {
       stop("ERROR: dim_method not PCA nor UMAP.")
     }
@@ -483,11 +623,12 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     ### make a data frame for ggplot
     plot_df <- data.frame(X=dim_map[rownames(Seurat_Object@meta.data),1],
                           Y=dim_map[rownames(Seurat_Object@meta.data),2],
+                          cluster_color = Seurat_Object@meta.data$Group,
+                          annotation_color = Seurat_Object@meta.data$Annotation,
                           direction = Seurat_Object@meta.data$direction,
                           direction2 = Seurat_Object@meta.data$direction2,
                           adhesiveness = Seurat_Object@meta.data$adhesiveness,
                           adhesiveness2 = Seurat_Object@meta.data$adhesiveness2,
-                          cluster_color = Seurat_Object@meta.data$Group,
                           specificity = Seurat_Object@meta.data$specificity,
                           specificity2 = Seurat_Object@meta.data$specificity2,
                           stringsAsFactors = FALSE, check.names = FALSE)
@@ -501,76 +642,94 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     ### draw a scatter plot with the adhesiveness info
     p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
       geom_point(aes_string(col="cluster_color"), size=2, alpha=0.5) +
-      xlab("PC1") + ylab("PC2") +
+      xlab(x_lab) + ylab(y_lab) +
       labs(col="Cluster") +
       ggtitle("UMAP with Cell Type") +
       scale_color_brewer(palette="Dark2") +
       theme_classic(base_size = 16)
     
     p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="annotation_color"), size=2, alpha=0.5) +
+      xlab(x_lab) + ylab(y_lab) +
+      labs(col="Cluster") +
+      ggtitle("UMAP with Cell Type") +
+      theme_classic(base_size = 16)
+    ### the id column in the plot_df should be a factor
+    p[[2]] <- LabelClusters(plot = p[[2]], id = "annotation_color", col = "black")
+    
+    p[[3]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
       geom_point(aes_string(col="direction", alpha="adhesiveness"), size=2) +
-      xlab("PC1") + ylab("PC2") +
+      xlab(x_lab) + ylab(y_lab) +
       labs(col="Direction", alpha="Adhesiveness") +
       ggtitle("UMAP with Direction & Adhesiveness") +
       scale_color_brewer(palette="Set1") +
       theme_classic(base_size = 16)
     
     plot_df$direction2 <- factor(plot_df$direction2, levels = unique(plot_df$direction2))
-    p[[3]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+    p[[4]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
       geom_point(aes_string(col="direction2", alpha="adhesiveness2"), size=2) +
-      xlab("PC1") + ylab("PC2") +
+      xlab(x_lab) + ylab(y_lab) +
       labs(col="Direction", alpha="Adhesiveness") +
       ggtitle("UMAP with Direction & Adhesiveness") +
       theme_classic(base_size = 16) +
       scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction2)[order(unique(plot_df$direction2))])],
                          labels = names(cell_colors_clust[as.character(unique(plot_df$direction2)[order(unique(plot_df$direction2))])]))
     ### the id column in the plot_df should be a factor
-    p[[3]] <- LabelClusters(plot = p[[3]], id = "direction2", col = "black")
+    p[[4]] <- LabelClusters(plot = p[[4]], id = "direction2", col = "black")
     
     ### save the plots
     g <- arrangeGrob(grobs = p,
-                     nrow = 3,
-                     ncol = 1,
+                     nrow = 2,
+                     ncol = 2,
                      top = "")
     ggsave(file = paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
-                         "_RNAMagnet_Result_AD_", time_point, "_New_Annotation.png"), g, width = 20, height = 20, dpi = 300)
+                         "_RNAMagnet_Result_AD_", time_point, "_New_Annotation.png"), g, width = 28, height = 20, dpi = 300)
     
     ### draw a scatter plot with the specificity info
     p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
       geom_point(aes_string(col="cluster_color"), size=2, alpha=0.5) +
-      xlab("PC1") + ylab("PC2") +
+      xlab(x_lab) + ylab(y_lab) +
       labs(col="Cluster") +
       ggtitle("UMAP with Cell Type") +
       scale_color_brewer(palette="Dark2") +
       theme_classic(base_size = 16)
     
     p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="annotation_color"), size=2, alpha=0.5) +
+      xlab(x_lab) + ylab(y_lab) +
+      labs(col="Cluster") +
+      ggtitle("UMAP with Cell Type") +
+      theme_classic(base_size = 16)
+    ### the id column in the plot_df should be a factor
+    p[[2]] <- LabelClusters(plot = p[[2]], id = "annotation_color", col = "black")
+    
+    p[[3]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
       geom_point(aes_string(col="direction", alpha="specificity"), size=2) +
-      xlab("PC1") + ylab("PC2") +
+      xlab(x_lab) + ylab(y_lab) +
       labs(col="Direction", alpha="Specificity") +
       ggtitle("UMAP with Direction & Specificity") +
       scale_color_brewer(palette="Set1") +
       theme_classic(base_size = 16)
     
     plot_df$direction2 <- factor(plot_df$direction2, levels = unique(plot_df$direction2))
-    p[[3]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+    p[[4]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
       geom_point(aes_string(col="direction2", alpha="specificity2"), size=2) +
-      xlab("PC1") + ylab("PC2") +
+      xlab(x_lab) + ylab(y_lab) +
       labs(col="Direction", alpha="Specificity") +
       ggtitle("UMAP with Direction & Specificity") +
       theme_classic(base_size = 16) +
       scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction2)[order(unique(plot_df$direction2))])],
                          labels = names(cell_colors_clust[as.character(unique(plot_df$direction2)[order(unique(plot_df$direction2))])]))
     ### the id column in the plot_df should be a factor
-    p[[3]] <- LabelClusters(plot = p[[3]], id = "direction2", col = "black")
+    p[[4]] <- LabelClusters(plot = p[[4]], id = "direction2", col = "black")
     
     ### save the plots
     g <- arrangeGrob(grobs = p,
-                     nrow = 3,
-                     ncol = 1,
+                     nrow = 2,
+                     ncol = 2,
                      top = "")
     ggsave(file = paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
-                         "_RNAMagnet_Result_SP_", time_point, "_New_Annotation.png"), g, width = 20, height = 20, dpi = 300)
+                         "_RNAMagnet_Result_SP_", time_point, "_New_Annotation.png"), g, width = 28, height = 20, dpi = 300)
     
   }
   
@@ -579,7 +738,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
                  target_col = "HSPC",
                  comp1 = c("STHSC", "MPP2", "MPP3", "MPP4"),
                  comp2 = "Stroma",
-                 time_point = "Adult",
+                 time_point = "ADULT",
                  dim_method = "UMAP",
                  result_dir=outputDir2)
   
