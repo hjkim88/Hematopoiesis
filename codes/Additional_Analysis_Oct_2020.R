@@ -2740,7 +2740,7 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
     dir.create(result_dir, showWarnings = FALSE, recursive = TRUE)
     
     ### set group info to the metadata
-    Seurat_Object@meta.data$Group <- paste0(Seurat_Object@meta.data[,target_col], "_", Seurat_Object@meta.data$Time)
+    Seurat_Object@meta.data$Group <- paste0(Seurat_Object@meta.data[,target_col], "_", Seurat_Object@meta.data$Development)
     
     ### all the comps
     comps <- union(paste0(comp1, "_", time_point), paste0(comp2, "_", time_point))
@@ -3181,7 +3181,7 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
   dir.create(result_dir, showWarnings = FALSE, recursive = TRUE)
   
   ### set group info to the metadata
-  Seurat_Object@meta.data$Group <- paste0(Seurat_Object@meta.data[,target_col], "_", Seurat_Object@meta.data$Time)
+  Seurat_Object@meta.data$Group <- paste0(Seurat_Object@meta.data[,target_col], "_", Seurat_Object@meta.data$Development)
   
   ### all the comps
   comps <- union(paste0(comp1, "_", time_point), paste0(comp2, "_", time_point))
@@ -3435,7 +3435,7 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
   dir.create(result_dir, showWarnings = FALSE, recursive = TRUE)
   
   ### set group info to the metadata
-  Seurat_Object@meta.data$Group <- paste0(Seurat_Object@meta.data[,target_col], "_", Seurat_Object@meta.data$Time)
+  Seurat_Object@meta.data$Group <- paste0(Seurat_Object@meta.data[,target_col], "_", Seurat_Object@meta.data$Development)
   
   ### all the comps
   comps <- union(paste0(comp1, "_", time_point), paste0(comp2, "_", time_point))
