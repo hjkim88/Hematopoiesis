@@ -392,13 +392,14 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   
   ### #3 analysis
   
-  third_analysis <- function(Seurat_Object = Updated_Seurat_Obj,
-                             target_col = "HSPC",
-                             comp1 = "LTHSC",
-                             comp2 = "Stroma",
-                             time_point = "Adult",
-                             dim_method = "UMAP",
-                             result_dir=outputDir2) {
+  ### a function for the third analysis
+  third_analysis <- function(Seurat_Object,
+                             target_col,
+                             comp1,
+                             comp2,
+                             time_point,
+                             dim_method,
+                             result_dir) {
     
     ### set output directory
     result_dir <- paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
@@ -418,9 +419,6 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     
     ### only keep the specified cells
     Seurat_Object <- subset(Seurat_Object, idents=comps)
-    
-    ### check whether the orders are the same
-    print(identical(names(Idents(object = Seurat_Object)), rownames(Seurat_Object@meta.data)))
     
     ### rownames in the meta.data should be in the same order as colnames in the counts
     Seurat_Object@meta.data <- Seurat_Object@meta.data[colnames(Seurat_Object@assays$RNA@counts),]
@@ -443,15 +441,29 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     ### draw a UMAP with Trent's annotation
     Seurat_Object@meta.data$Annotation <- factor(Seurat_Object@meta.data$Annotation)
     umap_plot <- DimPlot(Seurat_Object, reduction = "umap", group.by = "Annotation", pt.size = 1.5) +
-      labs(title = paste0("UMAP_Combined_Adult_With_the_Annotation"))
+      labs(title = paste0("UMAP_With_the_Annotation"))
     umap_plot[[1]]$layers[[1]]$aes_params$alpha <- 0.5
     umap_plot <- LabelClusters(plot = umap_plot, id = "Annotation", col = "black")
     ggsave(file = paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
                          "_UMAP_with_the_annotation_", time_point, ".png"),
            width = 15, height = 10, dpi = 300)
     
-    
   }
+  
+  ### adult LT-HSC vs adult stroma
+  third_analysis(Seurat_Object = Updated_Seurat_Obj,
+                 target_col = "HSPC",
+                 comp1 = "LTHSC",
+                 comp2 = "Stroma",
+                 time_point = "Adult",
+                 dim_method = "UMAP",
+                 result_dir=outputDir2)
+  
+  ### E16.5 MPP2/3/4/ST-HSCs vs E16.5 Stroma
+  
+  ### E18.5 MPP2/3/4/ST-HSCs vs E18.5 Stroma
+  
+  ### P0 MPP2/3/4/ST-HSCs vs P0 stroma
   
   
   
