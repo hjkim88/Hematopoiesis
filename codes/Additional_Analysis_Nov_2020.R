@@ -448,23 +448,166 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
                          "_UMAP_with_the_annotation_", time_point, ".png"),
            width = 15, height = 10, dpi = 300)
     
+    ### run RNAMagnet with anchors
+    ### Warning: the Idents(Seurat_Object) should be along with the given 'anchors' input
+    ### Another ERROR:
+    ### The following code is fixed due to an ERROR: 'drop=FALSE'
+    #compute mean gene expression level per population
+    # out@anchors <- do.call(cbind, lapply(anchors, function(id) {
+    #   apply(resolvedRawData[,seurat.ident == id,drop=FALSE],1,mean)
+    # }));
+    # colnames(out@anchors) <- anchors
+    Seurat_Object <- SetIdent(object = Seurat_Object,
+                              cells = rownames(Seurat_Object@meta.data),
+                              value = Seurat_Object@meta.data$Group)
+    result <- RNAMagnetAnchors(Seurat_Object,
+                               anchors = unique(Seurat_Object@meta.data$Group))
+    Seurat_Object <- SetIdent(object = Seurat_Object,
+                              cells = rownames(Seurat_Object@meta.data),
+                              value = Seurat_Object@meta.data$Annotation)
+    result2 <- RNAMagnetAnchors(Seurat_Object,
+                                anchors = unique(Seurat_Object@meta.data$Annotation))
+    
+    ### add RNAMagnet info to the seurat object
+    Seurat_Object@meta.data$direction <- as.character(result[rownames(Seurat_Object@meta.data),"direction"])
+    Seurat_Object@meta.data$direction2 <- as.character(result2[rownames(Seurat_Object@meta.data),"direction"])
+    Seurat_Object@meta.data$adhesiveness <- as.numeric(result[rownames(Seurat_Object@meta.data),"adhesiveness"])
+    Seurat_Object@meta.data$adhesiveness2 <- as.numeric(result2[rownames(Seurat_Object@meta.data),"adhesiveness"])
+    Seurat_Object@meta.data$specificity <- as.numeric(sapply(rownames(Seurat_Object@meta.data), function(x) {
+      result[x, result[x,"direction"]]
+    }))
+    Seurat_Object@meta.data$specificity2 <- as.numeric(sapply(rownames(Seurat_Object@meta.data), function(x) {
+      result2[x, result2[x,"direction"]]
+    }))
+    
+    ### make a data frame for ggplot
+    plot_df <- data.frame(X=dim_map[rownames(Seurat_Object@meta.data),1],
+                          Y=dim_map[rownames(Seurat_Object@meta.data),2],
+                          direction = Seurat_Object@meta.data$direction,
+                          direction2 = Seurat_Object@meta.data$direction2,
+                          adhesiveness = Seurat_Object@meta.data$adhesiveness,
+                          adhesiveness2 = Seurat_Object@meta.data$adhesiveness2,
+                          cluster_color = Seurat_Object@meta.data$Group,
+                          specificity = Seurat_Object@meta.data$specificity,
+                          specificity2 = Seurat_Object@meta.data$specificity2,
+                          stringsAsFactors = FALSE, check.names = FALSE)
+    
+    ### get colors for the clustering result
+    cell_colors_clust <- cell_pal(unique(Seurat_Object@meta.data$Annotation), hue_pal())
+    
+    ### scatter plot
+    p <- list()
+    
+    ### draw a scatter plot with the adhesiveness info
+    p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="cluster_color"), size=2, alpha=0.5) +
+      xlab("PC1") + ylab("PC2") +
+      labs(col="Cluster") +
+      ggtitle("UMAP with Cell Type") +
+      scale_color_brewer(palette="Dark2") +
+      theme_classic(base_size = 16)
+    
+    p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="direction", alpha="adhesiveness"), size=2) +
+      xlab("PC1") + ylab("PC2") +
+      labs(col="Direction", alpha="Adhesiveness") +
+      ggtitle("UMAP with Direction & Adhesiveness") +
+      scale_color_brewer(palette="Set1") +
+      theme_classic(base_size = 16)
+    
+    plot_df$direction2 <- factor(plot_df$direction2, levels = unique(plot_df$direction2))
+    p[[3]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="direction2", alpha="adhesiveness2"), size=2) +
+      xlab("PC1") + ylab("PC2") +
+      labs(col="Direction", alpha="Adhesiveness") +
+      ggtitle("UMAP with Direction & Adhesiveness") +
+      theme_classic(base_size = 16) +
+      scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction2)[order(unique(plot_df$direction2))])],
+                         labels = names(cell_colors_clust[as.character(unique(plot_df$direction2)[order(unique(plot_df$direction2))])]))
+    ### the id column in the plot_df should be a factor
+    p[[3]] <- LabelClusters(plot = p[[3]], id = "direction2", col = "black")
+    
+    ### save the plots
+    g <- arrangeGrob(grobs = p,
+                     nrow = 3,
+                     ncol = 1,
+                     top = "")
+    ggsave(file = paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                         "_RNAMagnet_Result_AD_", time_point, "_New_Annotation.png"), g, width = 20, height = 20, dpi = 300)
+    
+    ### draw a scatter plot with the specificity info
+    p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="cluster_color"), size=2, alpha=0.5) +
+      xlab("PC1") + ylab("PC2") +
+      labs(col="Cluster") +
+      ggtitle("UMAP with Cell Type") +
+      scale_color_brewer(palette="Dark2") +
+      theme_classic(base_size = 16)
+    
+    p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="direction", alpha="specificity"), size=2) +
+      xlab("PC1") + ylab("PC2") +
+      labs(col="Direction", alpha="Specificity") +
+      ggtitle("UMAP with Direction & Specificity") +
+      scale_color_brewer(palette="Set1") +
+      theme_classic(base_size = 16)
+    
+    plot_df$direction2 <- factor(plot_df$direction2, levels = unique(plot_df$direction2))
+    p[[3]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="direction2", alpha="specificity2"), size=2) +
+      xlab("PC1") + ylab("PC2") +
+      labs(col="Direction", alpha="Specificity") +
+      ggtitle("UMAP with Direction & Specificity") +
+      theme_classic(base_size = 16) +
+      scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction2)[order(unique(plot_df$direction2))])],
+                         labels = names(cell_colors_clust[as.character(unique(plot_df$direction2)[order(unique(plot_df$direction2))])]))
+    ### the id column in the plot_df should be a factor
+    p[[3]] <- LabelClusters(plot = p[[3]], id = "direction2", col = "black")
+    
+    ### save the plots
+    g <- arrangeGrob(grobs = p,
+                     nrow = 3,
+                     ncol = 1,
+                     top = "")
+    ggsave(file = paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                         "_RNAMagnet_Result_SP_", time_point, "_New_Annotation.png"), g, width = 20, height = 20, dpi = 300)
+    
   }
   
-  ### adult LT-HSC vs adult stroma
+  ### adult MPP2/3/4/ST-HSCs vs adult stroma
   third_analysis(Seurat_Object = Updated_Seurat_Obj,
                  target_col = "HSPC",
-                 comp1 = "LTHSC",
+                 comp1 = c("STHSC", "MPP2", "MPP3", "MPP4"),
                  comp2 = "Stroma",
                  time_point = "Adult",
                  dim_method = "UMAP",
                  result_dir=outputDir2)
   
   ### E16.5 MPP2/3/4/ST-HSCs vs E16.5 Stroma
+  third_analysis(Seurat_Object = Updated_Seurat_Obj,
+                 target_col = "HSPC",
+                 comp1 = c("STHSC", "MPP2", "MPP3", "MPP4"),
+                 comp2 = "Stroma",
+                 time_point = "E16",
+                 dim_method = "UMAP",
+                 result_dir=outputDir2)
   
   ### E18.5 MPP2/3/4/ST-HSCs vs E18.5 Stroma
+  third_analysis(Seurat_Object = Updated_Seurat_Obj,
+                 target_col = "HSPC",
+                 comp1 = c("STHSC", "MPP2", "MPP3", "MPP4"),
+                 comp2 = "Stroma",
+                 time_point = "E18",
+                 dim_method = "UMAP",
+                 result_dir=outputDir2)
   
   ### P0 MPP2/3/4/ST-HSCs vs P0 stroma
-  
-  
+  third_analysis(Seurat_Object = Updated_Seurat_Obj,
+                 target_col = "HSPC",
+                 comp1 = c("STHSC", "MPP2", "MPP3", "MPP4"),
+                 comp2 = "Stroma",
+                 time_point = "P0",
+                 dim_method = "UMAP",
+                 result_dir=outputDir2)
   
 }
