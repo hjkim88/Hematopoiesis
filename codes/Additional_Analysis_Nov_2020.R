@@ -144,252 +144,6 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   plot(umap_plot)
   ggsave(file = paste0(outputDir2, "UMAP_Combined_Adult_With_the_Annotation.png"), width = 15, height = 10, dpi = 300)
   
-  ### RNAMagnet for:
-  ### Adult LT-HSCs vs Adult CARs
-  ### Adult LT-HSCs vs Adult SECs
-  ### Adult LT-HSCs vs Adult AECs
-  ### Adult LT-HSCs vs Adult F1
-  ### Adult LT-HSCs vs Adult F4
-  ### Adult LT-HSCs vs Adult F5
-  
-  ### put two annotation types into one
-  Combined_Adult_Seurat_Obj@meta.data$Annotation2 <- Combined_Adult_Seurat_Obj@meta.data$Cell_Type
-  Combined_Adult_Seurat_Obj@meta.data$Annotation2[which(Combined_Adult_Seurat_Obj@meta.data$HSPC == "LTHSC")] <- "LTHSC"
-  Combined_Adult_Seurat_Obj@meta.data$Annotation2[which(Combined_Adult_Seurat_Obj@meta.data$Annotation2 == "Stroma")] <- as.character(Combined_Adult_Seurat_Obj@meta.data$Annotation[which(Combined_Adult_Seurat_Obj@meta.data$Annotation2 == "Stroma")])
-  
-  ### simply run RNAMagnet only to get signaling interactions
-  ### SO: Seurat object
-  ### target_col: Target column name of the given seurat object's meta.data
-  ### conds: a character vector of all the conditions in the 'target_col' that will be used
-  ### result_dir: output directory
-  simple_RNAMagnet_interaction <- function(SO, target_col, conds, result_dir) {
-    
-    result_dir <- paste0(result_dir, "/", paste(conds, collapse = "_vs_"), "/")
-    dir.create(result_dir, showWarnings = FALSE, recursive = TRUE)
-    
-    ### set the ident of the object with the HSPC type
-    SO <- SetIdent(object = SO,
-                   cells = rownames(SO@meta.data),
-                   value = SO@meta.data[,target_col])
-    
-    ### split the Seurat obj based on the given info
-    SO <- subset(SO, idents=conds)
-    
-    ### run UMAP
-    SO <- RunUMAP(SO, dims = 1:15)
-    dim_map <- Embeddings(SO, reduction = "umap")[rownames(SO@meta.data),]
-    
-    ### run RNAMagnet with anchors
-    result <- RNAMagnetAnchors(SO,
-                               anchors = unique(SO@meta.data[,target_col]))
-    
-    ### write the result as an Excel file
-    write.xlsx2(data.frame(Cell=rownames(result), result,
-                           stringsAsFactors = FALSE, check.names = FALSE),
-                file = paste0(result_dir, paste(conds, collapse = "_vs_"),
-                              "_RNAMagnet_Result.xlsx"),
-                sheetName = paste0("RNAMagnet_Result"),
-                row.names = FALSE)
-    
-    ### add RNAMagnet info to the seurat object
-    SO@meta.data$direction <- as.character(result[rownames(SO@meta.data),"direction"])
-    SO@meta.data$adhesiveness <- as.numeric(result[rownames(SO@meta.data),"adhesiveness"])
-    SO@meta.data$specificity <- as.numeric(sapply(rownames(SO@meta.data), function(x) {
-      result[x, result[x,"direction"]]
-    }))
-    
-    ### make a data frame for ggplot
-    plot_df <- data.frame(X=dim_map[rownames(SO@meta.data),1],
-                          Y=dim_map[rownames(SO@meta.data),2],
-                          direction = SO@meta.data$direction,
-                          adhesiveness = SO@meta.data$adhesiveness,
-                          cluster_color = SO@meta.data[,target_col],
-                          specificity = SO@meta.data$specificity,
-                          stringsAsFactors = FALSE, check.names = FALSE)
-    
-    ### get colors for the clustering result
-    cell_colors_clust <- cell_pal(unique(SO@meta.data[,target_col]), hue_pal())
-    
-    ### scatter plot
-    p <- list()
-    
-    ### draw a scatter plot with the adhesiveness info
-    p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
-      geom_point(aes_string(col="cluster_color"), size=2, alpha=0.5) +
-      xlab("PC1") + ylab("PC2") +
-      labs(col="Cluster") +
-      ggtitle(paste0("UMAP with Cell Type")) +
-      scale_color_brewer(palette="Dark2") +
-      theme_classic(base_size = 16)
-    
-    p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
-      geom_point(aes_string(col="direction", alpha="adhesiveness"), size=2) +
-      xlab("PC1") + ylab("PC2") +
-      labs(col="Direction", alpha="Adhesiveness") +
-      ggtitle(paste("UMAP with Direction & Adhesiveness")) +
-      theme_classic(base_size = 16) +
-      scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])],
-                         labels = names(cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])]))
-    
-    ### save the plots
-    g <- arrangeGrob(grobs = p,
-                     nrow = 2,
-                     ncol = 1,
-                     top = "")
-    ggsave(file = paste0(result_dir, paste(conds, collapse = "_vs_"),
-                         "_RNAMagnet_Result_AD.png"), g, width = 20, height = 12, dpi = 300)
-    
-    ### draw a beeswarm plot with the adhesiveness info
-    ggplot(plot_df, aes_string(x="cluster_color", y="adhesiveness")) +
-      theme_classic(base_size = 16) +
-      geom_boxplot() +
-      geom_beeswarm(aes_string(color="direction"), na.rm = TRUE) +
-      stat_compare_means() +
-      labs(x = "", y = "Adhesiveness") +
-      theme(legend.position="right")
-    ggsave(file = paste0(result_dir, paste(conds, collapse = "_vs_"),
-                         "_RNAMagnet_Beeswarm_AD.png"), width = 20, height = 12, dpi = 300)
-    
-    ### draw a scatter plot with the specificity info
-    p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
-      geom_point(aes_string(col="cluster_color"), size=2, alpha=0.5) +
-      xlab("PC1") + ylab("PC2") +
-      labs(col="Cluster") +
-      ggtitle(paste("UMAP with Cell Type")) +
-      scale_color_brewer(palette="Dark2") +
-      theme_classic(base_size = 16)
-    
-    p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
-      geom_point(aes_string(col="direction", alpha="specificity"), size=2) +
-      xlab("PC1") + ylab("PC2") +
-      labs(col="Direction", alpha="Specificity Score") +
-      ggtitle(paste("UMAP with Direction & Specificity Score")) +
-      theme_classic(base_size = 16) +
-      scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])],
-                         labels = names(cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])]))
-    
-    ### save the plots
-    g <- arrangeGrob(grobs = p,
-                     nrow = 2,
-                     ncol = 1,
-                     top = "")
-    ggsave(file = paste0(result_dir, paste(conds, collapse = "_vs_"),
-                         "_RNAMagnet_Result_SP.png"), g, width = 20, height = 12, dpi = 300)
-    
-    ### draw a beeswarm plot with the adhesiveness info
-    ggplot(plot_df, aes_string(x="cluster_color", y="specificity")) +
-      theme_classic(base_size = 16) +
-      geom_boxplot() +
-      geom_beeswarm(aes_string(color="direction"), na.rm = TRUE) +
-      stat_compare_means() +
-      labs(x = "", y = "Specificity") +
-      theme(legend.position="right")
-    ggsave(file = paste0(result_dir, paste(conds, collapse = "_vs_"),
-                         "_RNAMagnet_Beeswarm_SP.png"), width = 20, height = 12, dpi = 300)
-    
-    ### run RNAMagnet signaling
-    result <- RNAMagnetSignaling(SO)
-    
-    ### get all the interaction list
-    interaction_list <- NULL
-    for(clust1 in conds) {
-      for(clust2 in conds) {
-        il <- getRNAMagnetGenes(result, clust1, clust2, thresh = 0)
-        if(nrow(il) > 0) {
-          il$ligand_cluster <- clust1
-          il$receptor_cluster <- clust2
-          if(is.null(interaction_list)) {
-            interaction_list <- il
-          } else {
-            interaction_list <- rbind(interaction_list, il)
-          }
-        }
-      }
-    }
-    interaction_list <- cbind(interaction_list[3:4], interaction_list[1:2])
-    colnames(interaction_list) <- c("Ligand_Cluster", "Receptor_Cluster", "Interaction_Score", "Interaction_Pair")
-    
-    ### write out the interaction list
-    write.xlsx2(interaction_list,
-                file = paste0(result_dir, paste(conds, collapse = "_vs_"),
-                              "_Signaling_RNAMagnet_Interaction_List.xlsx"),
-                sheetName = paste0("Signaling_RNAMagnet_Interaction_List"),
-                row.names = FALSE)
-    
-  }
-  
-  ### Adult LT-HSCs vs Adult CARs
-  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
-                               target_col = "Annotation2",
-                               conds = c("LTHSC", "CARs"),
-                               result_dir = outputDir2)
-  
-  ### Adult LT-HSCs vs Adult SECs
-  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
-                               target_col = "Annotation2",
-                               conds = c("LTHSC", "SECs"),
-                               result_dir = outputDir2)
-  
-  ### Adult LT-HSCs vs Adult AECs
-  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
-                               target_col = "Annotation2",
-                               conds = c("LTHSC", "AECs"),
-                               result_dir = outputDir2)
-  
-  ### Adult LT-HSCs vs Adult F1
-  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
-                               target_col = "Annotation2",
-                               conds = c("LTHSC", "F-1"),
-                               result_dir = outputDir2)
-  
-  ### Adult LT-HSCs vs Adult F4
-  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
-                               target_col = "Annotation2",
-                               conds = c("LTHSC", "F-4"),
-                               result_dir = outputDir2)
-  
-  ### Adult LT-HSCs vs Adult F5
-  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
-                               target_col = "Annotation2",
-                               conds = c("LTHSC", "F-5"),
-                               result_dir = outputDir2)
-  
-  
-  ### RNAMagnet for the following:
-  ### E16.5 LT-HSCs vs E16.5 Stroma
-  ### E18.5 LT-HSCs vs E18.5 Stroma
-  ### P0 LT-HSCs vs P0 Stroma
-  
-  ### E16.5 LT-HSCs vs E16.5 Stroma
-  ### split the Seurat obj based on the given info
-  Combined_Adult_Seurat_Obj <- subset(Updated_Seurat_Obj, idents="E16")
-  
-  ### run the RNAMagnet wrapper function
-  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
-                               target_col = "HSPC",
-                               conds = c("LTHSC", "Stroma"),
-                               result_dir = paste0(outputDir2, "E16.5"))
-  
-  ### E18.5 LT-HSCs vs E18.5 Stroma
-  ### split the Seurat obj based on the given info
-  Combined_Adult_Seurat_Obj <- subset(Updated_Seurat_Obj, idents="E18")
-  
-  ### run the RNAMagnet wrapper function
-  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
-                               target_col = "HSPC",
-                               conds = c("LTHSC", "Stroma"),
-                               result_dir = paste0(outputDir2, "E18.5"))
-  
-  ### P0 LT-HSCs vs P0 Stroma
-  ### split the Seurat obj based on the given info
-  Combined_Adult_Seurat_Obj <- subset(Updated_Seurat_Obj, idents="P0")
-  
-  ### run the RNAMagnet wrapper function
-  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
-                               target_col = "HSPC",
-                               conds = c("LTHSC", "Stroma"),
-                               result_dir = paste0(outputDir2, "P0"))
-  
   
   #'Low-level function to run core RNA magnet steps
   #'
@@ -525,6 +279,310 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     if (return=="rnamagnet-class") myMagnet else data.frame(direction = as.factor(colnames(myMagnet@specificity)[apply(myMagnet@specificity,1,which.max)]), adhesiveness = myMagnet@adhesiveness, myMagnet@specificity[,anchors])
     
   }
+  
+  
+  ### RNAMagnet for:
+  ### Adult LT-HSCs vs Adult CARs
+  ### Adult LT-HSCs vs Adult SECs
+  ### Adult LT-HSCs vs Adult AECs
+  ### Adult LT-HSCs vs Adult F1
+  ### Adult LT-HSCs vs Adult F4
+  ### Adult LT-HSCs vs Adult F5
+  
+  ### put two annotation types into one
+  Combined_Adult_Seurat_Obj@meta.data$Annotation2 <- Combined_Adult_Seurat_Obj@meta.data$Cell_Type
+  Combined_Adult_Seurat_Obj@meta.data$Annotation2[which(Combined_Adult_Seurat_Obj@meta.data$HSPC == "LTHSC")] <- "LTHSC"
+  Combined_Adult_Seurat_Obj@meta.data$Annotation2[which(Combined_Adult_Seurat_Obj@meta.data$Annotation2 == "Stroma")] <- as.character(Combined_Adult_Seurat_Obj@meta.data$Annotation[which(Combined_Adult_Seurat_Obj@meta.data$Annotation2 == "Stroma")])
+  
+  ### simply run RNAMagnet only to get signaling interactions
+  ### SO: Seurat object
+  ### target_col: Target column name of the given seurat object's meta.data
+  ### conds: a character vector of all the conditions in the 'target_col' that will be used
+  ### result_dir: output directory
+  simple_RNAMagnet_interaction <- function(SO, target_col, conds, result_dir) {
+    
+    result_dir <- paste0(result_dir, "/", paste(conds, collapse = "_vs_"), "/")
+    dir.create(result_dir, showWarnings = FALSE, recursive = TRUE)
+    
+    ### set the ident of the object with the HSPC type
+    SO <- SetIdent(object = SO,
+                   cells = rownames(SO@meta.data),
+                   value = SO@meta.data[,target_col])
+    
+    ### split the Seurat obj based on the given info
+    SO <- subset(SO, idents=conds)
+    
+    ### run UMAP
+    SO <- RunUMAP(SO, dims = 1:15)
+    dim_map <- Embeddings(SO, reduction = "umap")[rownames(SO@meta.data),]
+    
+    ### run RNAMagnet with anchors
+    result <- RNAMagnetAnchors(SO,
+                               anchors = unique(SO@meta.data[,target_col]))
+    
+    ### run RNAMagnet with different anchors (new annotation from Trent)
+    SO <- SetIdent(object = SO,
+                   cells = rownames(SO@meta.data),
+                   value = SO@meta.data$Annotation)
+    result2 <- RNAMagnetAnchors(SO, anchors = unique(SO@meta.data$Annotation))
+    
+    ### write the result as an Excel file
+    write.xlsx2(data.frame(Cell=rownames(result), result,
+                           stringsAsFactors = FALSE, check.names = FALSE),
+                file = paste0(result_dir, paste(conds, collapse = "_vs_"),
+                              "_RNAMagnet_Result.xlsx"),
+                sheetName = paste0("RNAMagnet_Result"),
+                row.names = FALSE)
+    write.xlsx2(data.frame(Cell=rownames(result2), result2,
+                           stringsAsFactors = FALSE, check.names = FALSE),
+                file = paste0(result_dir, paste(conds, collapse = "_vs_"),
+                              "_RNAMagnet_Result_Using_Annotation.xlsx"),
+                sheetName = paste0("RNAMagnet_Result"),
+                row.names = FALSE)
+    
+    ### add RNAMagnet info to the seurat object
+    SO@meta.data$direction <- as.character(result[rownames(SO@meta.data),"direction"])
+    SO@meta.data$direction2 <- as.character(result2[rownames(SO@meta.data),"direction"])
+    SO@meta.data$adhesiveness <- as.numeric(result[rownames(SO@meta.data),"adhesiveness"])
+    SO@meta.data$adhesiveness2 <- as.numeric(result2[rownames(SO@meta.data),"adhesiveness"])
+    SO@meta.data$specificity <- as.numeric(sapply(rownames(SO@meta.data), function(x) {
+      result[x, result[x,"direction"]]
+    }))
+    SO@meta.data$specificity2 <- as.numeric(sapply(rownames(SO@meta.data), function(x) {
+      result2[x, result2[x,"direction"]]
+    }))
+    
+    ### make a data frame for ggplot
+    plot_df <- data.frame(X=dim_map[rownames(SO@meta.data),1],
+                          Y=dim_map[rownames(SO@meta.data),2],
+                          cluster_color = SO@meta.data[,target_col],
+                          direction = SO@meta.data$direction,
+                          direction2 = SO@meta.data$direction2,
+                          adhesiveness = SO@meta.data$adhesiveness,
+                          adhesiveness2 = SO@meta.data$adhesiveness2,
+                          specificity = SO@meta.data$specificity,
+                          specificity2 = SO@meta.data$specificity2,
+                          stringsAsFactors = FALSE, check.names = FALSE)
+    
+    ### scatter plot
+    p <- list()
+    
+    ### draw a scatter plot with the adhesiveness info
+    p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="cluster_color"), size=2, alpha=0.5) +
+      xlab("UMAP1") + ylab("UMAP2") +
+      labs(col="Cluster") +
+      ggtitle(paste0("UMAP with Cell Type")) +
+      scale_color_brewer(palette="Dark2") +
+      theme_classic(base_size = 16)
+    
+    ### get colors for the clustering result
+    cell_colors_clust <- cell_pal(unique(SO@meta.data[,target_col]), hue_pal())
+    
+    p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="direction", alpha="adhesiveness"), size=2) +
+      xlab("UMAP1") + ylab("UMAP2") +
+      labs(col="Direction", alpha="Adhesiveness") +
+      ggtitle(paste("UMAP with Direction & Adhesiveness")) +
+      theme_classic(base_size = 16) +
+      scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])],
+                         labels = names(cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])]))
+    
+    ### get colors for the clustering result
+    cell_colors_clust <- cell_pal(unique(SO@meta.data$Annotation), hue_pal())
+    
+    plot_df$direction2 <- factor(plot_df$direction2, levels = unique(plot_df$direction2))
+    p[[3]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="direction2", alpha="adhesiveness2"), size=2) +
+      xlab("UMAP1") + ylab("UMAP2") +
+      labs(col="Direction", alpha="Adhesiveness") +
+      ggtitle("UMAP with Direction & Adhesiveness") +
+      theme_classic(base_size = 16) +
+      scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction2)[order(unique(plot_df$direction2))])],
+                         labels = names(cell_colors_clust[as.character(unique(plot_df$direction2)[order(unique(plot_df$direction2))])]))
+    ### the id column in the plot_df should be a factor
+    p[[3]] <- LabelClusters(plot = p[[3]], id = "direction2", col = "black")
+    
+    ### save the plots
+    g <- arrangeGrob(grobs = p,
+                     nrow = 3,
+                     ncol = 1,
+                     top = "")
+    ggsave(file = paste0(result_dir, paste(conds, collapse = "_vs_"),
+                         "_RNAMagnet_Result_AD.png"), g, width = 20, height = 12, dpi = 300)
+    
+    ### draw a beeswarm plot with the adhesiveness info
+    ggplot(plot_df, aes_string(x="cluster_color", y="adhesiveness")) +
+      theme_classic(base_size = 16) +
+      geom_boxplot() +
+      geom_beeswarm(aes_string(color="direction"), na.rm = TRUE) +
+      stat_compare_means() +
+      labs(x = "", y = "Adhesiveness") +
+      theme(legend.position="right")
+    ggsave(file = paste0(result_dir, paste(conds, collapse = "_vs_"),
+                         "_RNAMagnet_Beeswarm_AD.png"), width = 20, height = 12, dpi = 300)
+    
+    ### draw a scatter plot with the specificity info
+    p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="cluster_color"), size=2, alpha=0.5) +
+      xlab("UMAP1") + ylab("UMAP2") +
+      labs(col="Cluster") +
+      ggtitle(paste("UMAP with Cell Type")) +
+      scale_color_brewer(palette="Dark2") +
+      theme_classic(base_size = 16)
+    
+    ### get colors for the clustering result
+    cell_colors_clust <- cell_pal(unique(SO@meta.data[,target_col]), hue_pal())
+    
+    p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="direction", alpha="specificity"), size=2) +
+      xlab("UMAP1") + ylab("UMAP2") +
+      labs(col="Direction", alpha="Specificity Score") +
+      ggtitle(paste("UMAP with Direction & Specificity Score")) +
+      theme_classic(base_size = 16) +
+      scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])],
+                         labels = names(cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])]))
+    
+    ### get colors for the clustering result
+    cell_colors_clust <- cell_pal(unique(SO@meta.data$Annotation), hue_pal())
+    
+    plot_df$direction2 <- factor(plot_df$direction2, levels = unique(plot_df$direction2))
+    p[[3]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="direction2", alpha="specificity2"), size=2) +
+      xlab("UMAP1") + ylab("UMAP2") +
+      labs(col="Direction", alpha="Specificity") +
+      ggtitle("UMAP with Direction & Specificity") +
+      theme_classic(base_size = 16) +
+      scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction2)[order(unique(plot_df$direction2))])],
+                         labels = names(cell_colors_clust[as.character(unique(plot_df$direction2)[order(unique(plot_df$direction2))])]))
+    ### the id column in the plot_df should be a factor
+    p[[3]] <- LabelClusters(plot = p[[3]], id = "direction2", col = "black")
+    
+    ### save the plots
+    g <- arrangeGrob(grobs = p,
+                     nrow = 3,
+                     ncol = 1,
+                     top = "")
+    ggsave(file = paste0(result_dir, paste(conds, collapse = "_vs_"),
+                         "_RNAMagnet_Result_SP.png"), g, width = 20, height = 12, dpi = 300)
+    
+    ### draw a beeswarm plot with the adhesiveness info
+    ggplot(plot_df, aes_string(x="cluster_color", y="specificity")) +
+      theme_classic(base_size = 16) +
+      geom_boxplot() +
+      geom_beeswarm(aes_string(color="direction"), na.rm = TRUE) +
+      stat_compare_means() +
+      labs(x = "", y = "Specificity") +
+      theme(legend.position="right")
+    ggsave(file = paste0(result_dir, paste(conds, collapse = "_vs_"),
+                         "_RNAMagnet_Beeswarm_SP.png"), width = 20, height = 12, dpi = 300)
+    
+    ### run RNAMagnet signaling
+    SO <- SetIdent(object = SO,
+                   cells = rownames(SO@meta.data),
+                   value = SO@meta.data[,target_col])
+    result <- RNAMagnetSignaling(SO)
+    
+    ### get all the interaction list
+    interaction_list <- NULL
+    for(clust1 in conds) {
+      for(clust2 in conds) {
+        il <- getRNAMagnetGenes(result, clust1, clust2, thresh = 0)
+        if(nrow(il) > 0) {
+          il$ligand_cluster <- clust1
+          il$receptor_cluster <- clust2
+          if(is.null(interaction_list)) {
+            interaction_list <- il
+          } else {
+            interaction_list <- rbind(interaction_list, il)
+          }
+        }
+      }
+    }
+    interaction_list <- cbind(interaction_list[3:4], interaction_list[1:2])
+    colnames(interaction_list) <- c("Ligand_Cluster", "Receptor_Cluster", "Interaction_Score", "Interaction_Pair")
+    
+    ### write out the interaction list
+    write.xlsx2(interaction_list,
+                file = paste0(result_dir, paste(conds, collapse = "_vs_"),
+                              "_Signaling_RNAMagnet_Interaction_List.xlsx"),
+                sheetName = paste0("Signaling_RNAMagnet_Interaction_List"),
+                row.names = FALSE)
+    
+  }
+  
+  ### Adult LT-HSCs vs Adult CARs
+  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
+                               target_col = "Annotation2",
+                               conds = c("LTHSC", "CARs"),
+                               result_dir = outputDir2)
+  
+  ### Adult LT-HSCs vs Adult SECs
+  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
+                               target_col = "Annotation2",
+                               conds = c("LTHSC", "SECs"),
+                               result_dir = outputDir2)
+  
+  ### Adult LT-HSCs vs Adult AECs
+  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
+                               target_col = "Annotation2",
+                               conds = c("LTHSC", "AECs"),
+                               result_dir = outputDir2)
+  
+  ### Adult LT-HSCs vs Adult F1
+  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
+                               target_col = "Annotation2",
+                               conds = c("LTHSC", "F-1"),
+                               result_dir = outputDir2)
+  
+  ### Adult LT-HSCs vs Adult F4
+  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
+                               target_col = "Annotation2",
+                               conds = c("LTHSC", "F-4"),
+                               result_dir = outputDir2)
+  
+  ### Adult LT-HSCs vs Adult F5
+  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
+                               target_col = "Annotation2",
+                               conds = c("LTHSC", "F-5"),
+                               result_dir = outputDir2)
+  
+  
+  ### RNAMagnet for the following:
+  ### E16.5 LT-HSCs vs E16.5 Stroma
+  ### E18.5 LT-HSCs vs E18.5 Stroma
+  ### P0 LT-HSCs vs P0 Stroma
+  
+  ### E16.5 LT-HSCs vs E16.5 Stroma
+  ### split the Seurat obj based on the given info
+  Combined_Adult_Seurat_Obj <- subset(Updated_Seurat_Obj, idents="E16")
+  
+  ### run the RNAMagnet wrapper function
+  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
+                               target_col = "HSPC",
+                               conds = c("LTHSC", "Stroma"),
+                               result_dir = paste0(outputDir2, "E16.5"))
+  
+  ### E18.5 LT-HSCs vs E18.5 Stroma
+  ### split the Seurat obj based on the given info
+  Combined_Adult_Seurat_Obj <- subset(Updated_Seurat_Obj, idents="E18")
+  
+  ### run the RNAMagnet wrapper function
+  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
+                               target_col = "HSPC",
+                               conds = c("LTHSC", "Stroma"),
+                               result_dir = paste0(outputDir2, "E18.5"))
+  
+  ### P0 LT-HSCs vs P0 Stroma
+  ### split the Seurat obj based on the given info
+  Combined_Adult_Seurat_Obj <- subset(Updated_Seurat_Obj, idents="P0")
+  
+  ### run the RNAMagnet wrapper function
+  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
+                               target_col = "HSPC",
+                               conds = c("LTHSC", "Stroma"),
+                               result_dir = paste0(outputDir2, "P0"))
+  
   
   ### #3 analysis
   
