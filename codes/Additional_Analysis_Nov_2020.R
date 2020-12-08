@@ -113,6 +113,17 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     }
   }
   
+  ### check the UMAP for all the cells
+  umap_plot <- DimPlot(Updated_Seurat_Obj, reduction = "umap", group.by = "HSPC", pt.size = 1.5) +
+    labs(title = paste0("UMAP_ALL_CELL_TYPES"))
+  umap_plot[[1]]$layers[[1]]$aes_params$alpha <- 0.5
+  plot(umap_plot)
+  
+  umap_plot <- DimPlot(Updated_Seurat_Obj, reduction = "umap", group.by = "Cell_Type", pt.size = 1.5) +
+    labs(title = paste0("UMAP_ALL_CELL_TYPES"))
+  umap_plot[[1]]$layers[[1]]$aes_params$alpha <- 0.5
+  plot(umap_plot)
+  
   ### set the ident of the object with the group info
   Updated_Seurat_Obj <- SetIdent(object = Updated_Seurat_Obj,
                                  cells = rownames(Updated_Seurat_Obj@meta.data),
@@ -299,7 +310,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   ### target_col: Target column name of the given seurat object's meta.data
   ### conds: a character vector of all the conditions in the 'target_col' that will be used
   ### result_dir: output directory
-  simple_RNAMagnet_interaction <- function(SO, target_col, conds, result_dir) {
+  simple_RNAMagnet_interaction <- function(SO, target_col, conds, dim_method, result_dir) {
     
     result_dir <- paste0(result_dir, "/", paste(conds, collapse = "_vs_"), "/")
     dir.create(result_dir, showWarnings = FALSE, recursive = TRUE)
@@ -312,9 +323,20 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     ### split the Seurat obj based on the given info
     SO <- subset(SO, idents=conds)
     
-    ### run UMAP
-    SO <- RunUMAP(SO, dims = 1:15)
-    dim_map <- Embeddings(SO, reduction = "umap")[rownames(SO@meta.data),]
+    ### run PCA/UMAP
+    if(dim_method == "PCA") {
+      SO <- RunPCA(SO, npcs = 15)
+      dim_map <- Embeddings(SO, reduction = "pca")[rownames(SO@meta.data),]
+      x_lab <- "PC1"
+      y_lab <- "PC2"
+    } else if(dim_method == "UMAP") {
+      SO <- RunUMAP(SO, dims = 1:15)
+      dim_map <- Embeddings(SO, reduction = "umap")[rownames(SO@meta.data),]
+      x_lab <- "UMAP1"
+      y_lab <- "UMAP2"
+    } else {
+      stop("ERROR: dim_method not PCA nor UMAP.")
+    }
     
     ### run RNAMagnet with anchors
     result <- RNAMagnetAnchors(SO,
@@ -370,7 +392,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     ### draw a scatter plot with the adhesiveness info
     p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
       geom_point(aes_string(col="cluster_color"), size=2, alpha=0.5) +
-      xlab("UMAP1") + ylab("UMAP2") +
+      xlab(x_lab) + ylab(x_lab) +
       labs(col="Cluster") +
       ggtitle(paste0("UMAP with Cell Type")) +
       scale_color_brewer(palette="Dark2") +
@@ -381,7 +403,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     
     p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
       geom_point(aes_string(col="direction", alpha="adhesiveness"), size=2) +
-      xlab("UMAP1") + ylab("UMAP2") +
+      xlab(x_lab) + ylab(x_lab) +
       labs(col="Direction", alpha="Adhesiveness") +
       ggtitle(paste("UMAP with Direction & Adhesiveness")) +
       theme_classic(base_size = 16) +
@@ -394,7 +416,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     plot_df$direction2 <- factor(plot_df$direction2, levels = unique(plot_df$direction2))
     p[[3]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
       geom_point(aes_string(col="direction2", alpha="adhesiveness2"), size=2) +
-      xlab("UMAP1") + ylab("UMAP2") +
+      xlab(x_lab) + ylab(x_lab) +
       labs(col="Direction", alpha="Adhesiveness") +
       ggtitle("UMAP with Direction & Adhesiveness") +
       theme_classic(base_size = 16) +
@@ -409,7 +431,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
                      ncol = 1,
                      top = "")
     ggsave(file = paste0(result_dir, paste(conds, collapse = "_vs_"),
-                         "_RNAMagnet_Result_AD.png"), g, width = 20, height = 12, dpi = 300)
+                         "_RNAMagnet_Result_AD.png"), g, width = 20, height = 24, dpi = 300)
     
     ### draw a beeswarm plot with the adhesiveness info
     ggplot(plot_df, aes_string(x="cluster_color", y="adhesiveness")) +
@@ -425,7 +447,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     ### draw a scatter plot with the specificity info
     p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
       geom_point(aes_string(col="cluster_color"), size=2, alpha=0.5) +
-      xlab("UMAP1") + ylab("UMAP2") +
+      xlab(x_lab) + ylab(x_lab) +
       labs(col="Cluster") +
       ggtitle(paste("UMAP with Cell Type")) +
       scale_color_brewer(palette="Dark2") +
@@ -436,7 +458,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     
     p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
       geom_point(aes_string(col="direction", alpha="specificity"), size=2) +
-      xlab("UMAP1") + ylab("UMAP2") +
+      xlab(x_lab) + ylab(x_lab) +
       labs(col="Direction", alpha="Specificity Score") +
       ggtitle(paste("UMAP with Direction & Specificity Score")) +
       theme_classic(base_size = 16) +
@@ -449,7 +471,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     plot_df$direction2 <- factor(plot_df$direction2, levels = unique(plot_df$direction2))
     p[[3]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
       geom_point(aes_string(col="direction2", alpha="specificity2"), size=2) +
-      xlab("UMAP1") + ylab("UMAP2") +
+      xlab(x_lab) + ylab(x_lab) +
       labs(col="Direction", alpha="Specificity") +
       ggtitle("UMAP with Direction & Specificity") +
       theme_classic(base_size = 16) +
@@ -464,7 +486,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
                      ncol = 1,
                      top = "")
     ggsave(file = paste0(result_dir, paste(conds, collapse = "_vs_"),
-                         "_RNAMagnet_Result_SP.png"), g, width = 20, height = 12, dpi = 300)
+                         "_RNAMagnet_Result_SP.png"), g, width = 20, height = 24, dpi = 300)
     
     ### draw a beeswarm plot with the adhesiveness info
     ggplot(plot_df, aes_string(x="cluster_color", y="specificity")) +
@@ -515,36 +537,42 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
                                target_col = "Annotation2",
                                conds = c("LTHSC", "CARs"),
+                               dim_method = "UMAP",
                                result_dir = outputDir2)
   
   ### Adult LT-HSCs vs Adult SECs
   simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
                                target_col = "Annotation2",
                                conds = c("LTHSC", "SECs"),
+                               dim_method = "UMAP",
                                result_dir = outputDir2)
   
   ### Adult LT-HSCs vs Adult AECs
   simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
                                target_col = "Annotation2",
                                conds = c("LTHSC", "AECs"),
+                               dim_method = "UMAP",
                                result_dir = outputDir2)
   
   ### Adult LT-HSCs vs Adult F1
   simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
                                target_col = "Annotation2",
                                conds = c("LTHSC", "F-1"),
+                               dim_method = "UMAP",
                                result_dir = outputDir2)
   
   ### Adult LT-HSCs vs Adult F4
   simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
                                target_col = "Annotation2",
                                conds = c("LTHSC", "F-4"),
+                               dim_method = "UMAP",
                                result_dir = outputDir2)
   
   ### Adult LT-HSCs vs Adult F5
   simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
                                target_col = "Annotation2",
                                conds = c("LTHSC", "F-5"),
+                               dim_method = "UMAP",
                                result_dir = outputDir2)
   
   
@@ -553,34 +581,60 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   ### E18.5 LT-HSCs vs E18.5 Stroma
   ### P0 LT-HSCs vs P0 Stroma
   
+  ### set the ident of the object with the group info
+  Updated_Seurat_Obj <- SetIdent(object = Updated_Seurat_Obj,
+                                 cells = rownames(Updated_Seurat_Obj@meta.data),
+                                 value = Updated_Seurat_Obj@meta.data$Development)
+  
   ### E16.5 LT-HSCs vs E16.5 Stroma
   ### split the Seurat obj based on the given info
   Combined_Adult_Seurat_Obj <- subset(Updated_Seurat_Obj, idents="E16")
+  
+  ### check the UMAP for all the cells
+  umap_plot <- DimPlot(Combined_Adult_Seurat_Obj, reduction = "umap", group.by = "Cell_Type", pt.size = 1.5) +
+    labs(title = paste0("UMAP_E16"))
+  umap_plot[[1]]$layers[[1]]$aes_params$alpha <- 0.5
+  plot(umap_plot)
   
   ### run the RNAMagnet wrapper function
   simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
                                target_col = "HSPC",
                                conds = c("LTHSC", "Stroma"),
+                               dim_method = "PCA",
                                result_dir = paste0(outputDir2, "E16.5"))
   
   ### E18.5 LT-HSCs vs E18.5 Stroma
   ### split the Seurat obj based on the given info
   Combined_Adult_Seurat_Obj <- subset(Updated_Seurat_Obj, idents="E18")
   
+  ### check the UMAP for all the cells
+  umap_plot <- DimPlot(Combined_Adult_Seurat_Obj, reduction = "umap", group.by = "Cell_Type", pt.size = 1.5) +
+    labs(title = paste0("UMAP_E16"))
+  umap_plot[[1]]$layers[[1]]$aes_params$alpha <- 0.5
+  plot(umap_plot)
+  
   ### run the RNAMagnet wrapper function
   simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
                                target_col = "HSPC",
                                conds = c("LTHSC", "Stroma"),
+                               dim_method = "PCA",
                                result_dir = paste0(outputDir2, "E18.5"))
   
   ### P0 LT-HSCs vs P0 Stroma
   ### split the Seurat obj based on the given info
   Combined_Adult_Seurat_Obj <- subset(Updated_Seurat_Obj, idents="P0")
   
+  ### check the UMAP for all the cells
+  umap_plot <- DimPlot(Combined_Adult_Seurat_Obj, reduction = "umap", group.by = "Cell_Type", pt.size = 1.5) +
+    labs(title = paste0("UMAP_E16"))
+  umap_plot[[1]]$layers[[1]]$aes_params$alpha <- 0.5
+  plot(umap_plot)
+  
   ### run the RNAMagnet wrapper function
   simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
                                target_col = "HSPC",
                                conds = c("LTHSC", "Stroma"),
+                               dim_method = "PCA",
                                result_dir = paste0(outputDir2, "P0"))
   
   
