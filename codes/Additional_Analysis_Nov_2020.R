@@ -294,6 +294,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   ### A function that creates mupliple plots with highliting
   ### one anchor at a time - thus result in many plots
   ### only one anchor is colored and others will be grayed
+  ### plot_df example below:
   # plot_df <- data.frame(X=dim_map[rownames(SO@meta.data),1],
   #                       Y=dim_map[rownames(SO@meta.data),2],
   #                       cluster_color = SO@meta.data[,target_col],
@@ -304,10 +305,117 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   #                       specificity = SO@meta.data$specificity,
   #                       specificity2 = SO@meta.data$specificity2,
   #                       stringsAsFactors = FALSE, check.names = FALSE)
+  ### anchor_col: the column name of plot_df that will be colored in the plots
+  ### transp_col: adhesiveness/specificity column of the plot_df that will be represented with transparency
+  ### dim_method: Is the RNAMagent based on UMAP or PCA? Should be one of them
+  ### output_directory: the directory that the results of the function will be saved
+  ### width, height, dpi: plot width, height, and resolution values
   RNAMagnet_multiple_anchor_plot <- function(plot_df,
+                                             anchor_col,
+                                             transp_col,
+                                             dim_method = c("UMAP", "PCA"),
                                              output_directory = "./",
                                              width = 20, height = 24, dpi = 300) {
-      
+    
+    ### get colors for the clustering result
+    cell_colors_clust <- cell_pal(unique(plot_df[,anchor_col]), hue_pal())
+    
+    ### PCA/UMAP label
+    if(dim_method[1] == "PCA") {
+      x_lab <- "PC1"
+      y_lab <- "PC2"
+    } else if(dim_method[1] == "UMAP") {
+      x_lab <- "UMAP1"
+      y_lab <- "UMAP2"
+    } else {
+      stop("ERROR: dim_method not PCA nor UMAP.")
+    }
+    
+    ### Adhresiveness/Specificity label
+    if(grepl("adhesiveness", transp_col)) {
+      transp_label <- "Adhesiveness"
+    } else if(grepl("specificity", transp_col)) {
+      transp_label <- "Specificity"
+    } else {
+      stop("ERROR: transp_col not adhesiveness nor specificity")
+    }
+    
+    ### make the column as factors
+    plot_df[,anchor_col] <- factor(plot_df[,anchor_col], levels = unique(plot_df[,anchor_col]))
+    
+    ### create an empty list
+    p <- vector("list", length = length(unique(plot_df[,anchor_col]))+1)
+    
+    ### draw RNAMagnet plots coloring differently for each anchor
+    p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col=anchor_col, alpha=transp_col), size=2) +
+      xlab(x_lab) + ylab(x_lab) +
+      labs(col="Direction", alpha=transp_label) +
+      theme_classic(base_size = 16) +
+      scale_color_manual(values = cell_colors_clust,
+                         labels = names(cell_colors_clust)) +
+      theme(legend.title = element_text(size = 10),
+            legend.text = element_text(size = 8))
+    ### the id column in the plot_df should be a factor
+    p[[1]] <- LabelClusters(plot = p[[1]], id = anchor_col, col = "black")
+    for(i in 1:length(unique(plot_df[,anchor_col]))) {
+      specific_colorset <- cell_colors_clust[as.character(plot_df[,anchor_col])]
+      specific_colorset[which(specific_colorset != cell_colors_clust[i])] <- "gray"
+      plot_df$specific_colorset <- specific_colorset
+      p[[i+1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+        geom_point(aes_string(col="specific_colorset", alpha=transp_col), size=2) +
+        xlab(x_lab) + ylab(x_lab) +
+        labs(col="Direction", alpha=transp_label) +
+        theme_classic(base_size = 16) +
+        scale_color_manual(values = c(cell_colors_clust[i], "gray"),
+                           labels = c(names(cell_colors_clust)[i], "Others")) +
+        theme(legend.title = element_text(size = 10),
+              legend.text = element_text(size = 8))
+      ### the id column in the plot_df should be a factor
+      p[[i+1]] <- LabelClusters(plot = p[[i+1]], id = anchor_col, col = "black")
+    }
+    
+    ### save the plots
+    if(length(p) > 20 && length(p) <= 25) {
+      fig_nrow <- 5
+      fig_ncol <- 5
+    } else if(length(p) > 16 && length(p) <= 20) {
+      fig_nrow <- 4
+      fig_ncol <- 5
+    } else if(length(p) > 12 && length(p) <= 16) {
+      fig_nrow <- 4
+      fig_ncol <- 4
+    } else if(length(p) > 9 && length(p) <= 12) {
+      fig_nrow <- 3
+      fig_ncol <- 4
+    } else if(length(p) > 6 && length(p) <= 9) {
+      fig_nrow <- 3
+      fig_ncol <- 3
+    } else if(length(p) > 4 && length(p) <= 6) {
+      fig_nrow <- 2
+      fig_ncol <- 3
+    } else if(length(p) > 2 && length(p) <= 4) {
+      fig_nrow <- 2
+      fig_ncol <- 2
+    } else if(length(p) > 1 && length(p) <= 2) {
+      fig_nrow <- 1
+      fig_ncol <- 2
+    } else if(length(p) == 1) {
+      fig_nrow <- 1
+      fig_ncol <- 1
+    } else {
+      fig_nrow <- 6
+      fig_ncol <- 6
+    }
+    g <- arrangeGrob(grobs = p,
+                     nrow = fig_nrow,
+                     ncol = fig_ncol,
+                     top = paste0(dim_method[1], " with Direction & ", transp_label))
+    ggsave(file = paste0(output_directory, "RNAMagnet_", dim_method[1], "_", anchor_col, "_and_", transp_col, ".png"),
+           g, width = 20, height = 12, dpi = 300)
+    
+    
+    ### heatmap that Jeremy suggested
     
     
     
