@@ -291,6 +291,27 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     
   }
   
+  ### A function that creates mupliple plots with highliting
+  ### one anchor at a time - thus result in many plots
+  ### only one anchor is colored and others will be grayed
+  # plot_df <- data.frame(X=dim_map[rownames(SO@meta.data),1],
+  #                       Y=dim_map[rownames(SO@meta.data),2],
+  #                       cluster_color = SO@meta.data[,target_col],
+  #                       direction = SO@meta.data$direction,
+  #                       direction2 = SO@meta.data$direction2,
+  #                       adhesiveness = SO@meta.data$adhesiveness,
+  #                       adhesiveness2 = SO@meta.data$adhesiveness2,
+  #                       specificity = SO@meta.data$specificity,
+  #                       specificity2 = SO@meta.data$specificity2,
+  #                       stringsAsFactors = FALSE, check.names = FALSE)
+  RNAMagnet_multiple_anchor_plot <- function(plot_df,
+                                             output_directory = "./",
+                                             width = 20, height = 24, dpi = 300) {
+      
+    
+    
+    
+  }
   
   ### RNAMagnet for:
   ### Adult LT-HSCs vs Adult CARs
