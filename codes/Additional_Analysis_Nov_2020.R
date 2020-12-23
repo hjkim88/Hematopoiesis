@@ -41,6 +41,8 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     remotes::install_github("veltenlab/rnamagnet")
     require(RNAMagnet, quietly = TRUE)
   }
+  # Sys.setenv(RETICULATE_MINICONDA_PATH = "D:/Miniconda3/")
+  # Sys.setenv(RETICULATE_PYTHON = "D:/Miniconda3/envs/r-reticulate/")
   if(!require(reticulate, quietly = TRUE)) {
     install.packages("reticulate")
     require(reticulate, quietly = TRUE)
@@ -70,9 +72,36 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   outputDir2 <- paste0(outputDir, "RNA_Magnet/")
   dir.create(outputDir2, showWarnings = FALSE, recursive = TRUE)
   
+  ### In terminal, if 'bash: conda: command not found',
+  ### . /d/Miniconda3/etc/profile.d/conda.sh
+  ###
+  ### python --version
+  ### python-magic needs python version 2.7 not 3.*
+  ### conda search python
+  ### conda install python=2.7
+  ###
+  ### To remove an environment
+  ### conda deactivate
+  ### conda remove --name "r-reticulate" --all
+  ###
+  ### conda create -n "r-reticulate"
+  ### conda install -n "r-reticulate" python=2.7
+  ### conda install -n "r-reticulate" numpy=1.15.0
+  ###
+  ### conda activate "r-reticulate"
+  ### pip install python-magic=0.4.18
+  ### conda install -c conda-forge python-magic
+  ###
+  ### pip list
+  ###
+  ### https://github.com/pidydx/libmagicwin64
+  ### Drop the dlls (libgnurx-0.dll, magic.mgc, & magic1.dll) in C:\Windows\System32 and python magic will import correctly.
+  
   ### see python environment since RNAMagnet uses the python module 'magic'
-  # conda_create("r-reticulate")
-  # conda_install("r-reticulate", "python-magic")
+  # conda search python-magic --channel conda-forge
+  # conda_create(packages = c("python=3.8.5", "numpy=1.19.1"))
+  # conda_install("r-reticulate", "magic-impute")
+  # pip install magic-impute
   use_condaenv("r-reticulate")
   py_config()
   py_module_available("magic")
