@@ -102,6 +102,8 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   # conda_create(packages = c("python=3.8.5", "numpy=1.19.1"))
   # conda_install("r-reticulate", "magic-impute")
   # pip install magic-impute
+  # there are two magics: magic-impute & python-magic.
+  # python-magic is not what we want, so don't install it - magic-impute would work fine.
   use_condaenv("r-reticulate")
   py_config()
   py_module_available("magic")
