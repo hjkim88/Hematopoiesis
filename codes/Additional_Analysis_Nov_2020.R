@@ -326,6 +326,13 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     
   }
   
+  ### RNAMagnetSignaling
+  RNAMagnetSignaling <- function(seurat, neighborhood.distance = NULL, neighborhood.gradient = NULL, .k = 10, .x0 = 0.5, .minExpression = 10, .minMolecules = 1, .version = "1.0.0", .cellularCompartment = c("Secreted","Both"), .manualAnnotation = "Correct" ) {
+    
+    RNAMagnetBase(seurat, anchors = NULL, neighborhood.distance,neighborhood.gradient, .k, .x0, .minExpression, .minMolecules, .version, .cellularCompartment, .manualAnnotation, FALSE)
+    
+  }
+  
   ### hierarchical clustering functions
   dist.spear <- function(x) as.dist(1-cor(t(x), method = "spearman"))
   hclust.ave <- function(x) hclust(x, method="average")
@@ -402,9 +409,21 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     p <- vector("list", length = length(unique(plot_df[,anchor_col]))+2)
     
     ### plot options
-    base_size <- 8
-    title_sie <- 6
-    text_size <- 6
+    if(length(anchor_colors_clust) > 20) {
+      base_size <- 6
+      title_sie <- 6
+      text_size <- 3
+      legend_key_size <- 0.2
+      legend_key_spacing <- 0.05
+      label_size <- 1
+    } else {
+      base_size <- 8
+      title_sie <- 6
+      text_size <- 6
+      legend_key_size <- 0.3
+      legend_key_spacing <- 0.1
+      label_size <- 2
+    }
     
     #
     ### draw RNAMagnet plots coloring differently for each anchor
@@ -420,10 +439,10 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
                          labels = names(original_colors_clust)) +
       theme(legend.title = element_text(size = title_sie),
             legend.text = element_text(size = text_size),
-            legend.key.size = unit(0.3, 'cm'),
-            legend.spacing = unit(0.1, 'cm'))
+            legend.key.size = unit(legend_key_size, 'cm'),
+            legend.spacing = unit(legend_key_spacing, 'cm'))
     ### the id column in the plot_df should be a factor
-    p[[1]] <- LabelClusters(plot = p[[1]], id = original_col, col = "black")
+    p[[1]] <- LabelClusters(plot = p[[1]], id = original_col, col = "black", size = label_size)
     
     ### with all the directions
     p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
@@ -436,11 +455,11 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
                          labels = names(anchor_colors_clust)) +
       theme(legend.title = element_text(size = title_sie),
             legend.text = element_text(size = text_size),
-            legend.key.size = unit(0.3, 'cm'),
-            legend.spacing = unit(0.1, 'cm')) +
+            legend.key.size = unit(legend_key_size, 'cm'),
+            legend.spacing = unit(legend_key_spacing, 'cm')) +
       guides(col = guide_legend(order = 1), alpha = guide_legend(order = 2))
     ### the id column in the plot_df should be a factor
-    p[[2]] <- LabelClusters(plot = p[[2]], id = original_col, col = "black")
+    p[[2]] <- LabelClusters(plot = p[[2]], id = original_col, col = "black", size = label_size)
     for(i in 1:length(unique(plot_df[,anchor_col]))) {
       specific_colorset <- anchor_colors_clust[as.character(plot_df[,anchor_col])]
       specific_colorset[which(specific_colorset != anchor_colors_clust[i])] <- "gray"
@@ -455,11 +474,11 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
                            labels = c(names(anchor_colors_clust)[i], "Others")) +
         theme(legend.title = element_text(size = title_sie),
               legend.text = element_text(size = text_size),
-              legend.key.size = unit(0.3, 'cm'),
-              legend.spacing = unit(0.1, 'cm')) +
+              legend.key.size = unit(legend_key_size, 'cm'),
+              legend.spacing = unit(legend_key_spacing, 'cm')) +
         guides(col = guide_legend(order = 1), alpha = guide_legend(order = 2))
       ### the id column in the plot_df should be a factor
-      p[[i+2]] <- LabelClusters(plot = p[[i+2]], id = original_col, col = "black")
+      p[[i+2]] <- LabelClusters(plot = p[[i+2]], id = original_col, col = "black", size = label_size)
     }
     
     ### save the plots
@@ -524,7 +543,12 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     names(colors) <- uniqueV
     
     ### legend size
-    if(length(colors) > 5) {
+    if(length(colors) > 20) {
+      legend_cex <- 0.6
+      legend_loc <- "bottomleft"
+      legend_y_inset <- -0.3
+    }
+    else if(length(colors) > 5) {
       legend_cex <- 0.8
       legend_loc <- "bottomleft"
       legend_y_inset <- -0.3
@@ -548,9 +572,8 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
               RowSideColors = rbind(colors[as.character(plot_df[,original_col])]),
               ColSideColors = cbind(colors[as.character(colnames(heatmap_mat))]),
               cexRow = 1.5, cexCol = 1.5, na.rm = TRUE,
-              main = paste0(title, "_(",
-                            nrow(heatmap_mat), " Cells x ",
-                            ncol(heatmap_mat), " Directions)", "\n",
+              main = paste0(nrow(heatmap_mat), " Cells x ",
+                            ncol(heatmap_mat), " Directions", "\n",
                             "[Rows: Original Cell Type, Columns: Direction]"))
     legend(legend_loc, inset = c(0,legend_y_inset), xpd = TRUE, title = "Cell Type", legend = names(colors), fill = colors, cex = legend_cex, y.intersp = 0.8, box.lty = 0)
     dev.off()
@@ -1036,9 +1059,9 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     # colnames(out@anchors) <- anchors
     Seurat_Object <- SetIdent(object = Seurat_Object,
                               cells = rownames(Seurat_Object@meta.data),
-                              value = Seurat_Object@meta.data$Group)
+                              value = Seurat_Object@meta.data[,target_col])
     result <- RNAMagnetAnchors(Seurat_Object,
-                               anchors = unique(Seurat_Object@meta.data$Group))
+                               anchors = unique(Seurat_Object@meta.data[,target_col]))
     Seurat_Object <- SetIdent(object = Seurat_Object,
                               cells = rownames(Seurat_Object@meta.data),
                               value = Seurat_Object@meta.data$Annotation)
@@ -1058,16 +1081,16 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     }))
     
     ### make a data frame for ggplot
-    plot_df <- data.frame(X=dim_map[rownames(SO@meta.data),1],
-                          Y=dim_map[rownames(SO@meta.data),2],
-                          cluster_color = SO@meta.data[,target_col],
-                          cluster_color2 = SO@meta.data$Annotation,
-                          direction = SO@meta.data$direction,
-                          direction2 = SO@meta.data$direction2,
-                          adhesiveness = SO@meta.data$adhesiveness,
-                          adhesiveness2 = SO@meta.data$adhesiveness2,
-                          specificity = SO@meta.data$specificity,
-                          specificity2 = SO@meta.data$specificity2,
+    plot_df <- data.frame(X=dim_map[rownames(Seurat_Object@meta.data),1],
+                          Y=dim_map[rownames(Seurat_Object@meta.data),2],
+                          cluster_color = Seurat_Object@meta.data[,target_col],
+                          cluster_color2 = Seurat_Object@meta.data$Annotation,
+                          direction = Seurat_Object@meta.data$direction,
+                          direction2 = Seurat_Object@meta.data$direction2,
+                          adhesiveness = Seurat_Object@meta.data$adhesiveness,
+                          adhesiveness2 = Seurat_Object@meta.data$adhesiveness2,
+                          specificity = Seurat_Object@meta.data$specificity,
+                          specificity2 = Seurat_Object@meta.data$specificity2,
                           stringsAsFactors = FALSE, check.names = FALSE)
     
     ### scatter plot
@@ -1202,7 +1225,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
                                    title = paste0(paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
                                                   "_RNAMagnet_Result_AD_", time_point, "_NEW_Annotation"),
                                    output_directory = result_dir)
-    ### Specificity with Trent's aanotation
+    ### Specificity with Trent's annotation
     RNAMagnet_multiple_anchor_plot(plot_df = plot_df,
                                    original_col = "cluster_color2",
                                    anchor_col = "direction2",
@@ -1215,14 +1238,14 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     ### run RNAMagnet signaling
     Seurat_Object <- SetIdent(object = Seurat_Object,
                               cells = rownames(Seurat_Object@meta.data),
-                              value = Seurat_Object@meta.data$Annotation)
-    result <- RNAMagnetSignaling(Seurat_Object)
+                              value = Seurat_Object@meta.data[,target_col])
+    result3 <- RNAMagnetSignaling(Seurat_Object)
     
     ### get all the interaction list
     interaction_list <- NULL
-    for(clust1 in conds) {
-      for(clust2 in conds) {
-        il <- getRNAMagnetGenes(result, clust1, clust2, thresh = 0)
+    for(clust1 in unique(Seurat_Object@meta.data[,target_col])) {
+      for(clust2 in unique(Seurat_Object@meta.data[,target_col])) {
+        il <- getRNAMagnetGenes(result3, clust1, clust2, thresh = 0)
         if(nrow(il) > 0) {
           il$ligand_cluster <- clust1
           il$receptor_cluster <- clust2
@@ -1240,7 +1263,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     ### write out the interaction list
     write.xlsx2(interaction_list,
                 file = paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
-                              "_Signaling_RNAMagnet_Interaction_List_", time_point, "_New_Annotation.xlsx"),
+                              "_Signaling_RNAMagnet_Interaction_List_", time_point, "_Original_Annotation.xlsx"),
                 sheetName = paste0("Signaling_RNAMagnet_Interaction_List"),
                 row.names = FALSE)
     
