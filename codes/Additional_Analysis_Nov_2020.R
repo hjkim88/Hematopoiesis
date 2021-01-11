@@ -43,6 +43,8 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   }
   # Sys.setenv(RETICULATE_MINICONDA_PATH = "D:/Miniconda3/")
   # Sys.setenv(RETICULATE_PYTHON = "D:/Miniconda3/envs/r-reticulate/")
+  # Sys.setenv(RETICULATE_MINICONDA_PATH = "C:/Users/hkim8/Miniconda3/")
+  # Sys.setenv(RETICULATE_PYTHON = "C:/Users/hkim8/Miniconda3/envs/r-reticulate/")
   if(!require(reticulate, quietly = TRUE)) {
     install.packages("reticulate")
     require(reticulate, quietly = TRUE)
@@ -83,22 +85,16 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   ### In terminal, if 'bash: conda: command not found',
   ### . /d/Miniconda3/etc/profile.d/conda.sh
   ###
-  ### python --version
-  ### python-magic needs python version 2.7 not 3.*
-  ### conda search python
-  ### conda install python=2.7
-  ###
   ### To remove an environment
   ### conda deactivate
   ### conda remove --name "r-reticulate" --all
   ###
   ### conda create -n "r-reticulate"
-  ### conda install -n "r-reticulate" python=2.7
-  ### conda install -n "r-reticulate" numpy=1.15.0
+  ### conda install -n "r-reticulate" python
+  ### conda install -n "r-reticulate" numpy
   ###
   ### conda activate "r-reticulate"
-  ### pip install python-magic=0.4.18
-  ### conda install -c conda-forge python-magic
+  ### pip install magic-impute
   ###
   ### pip list
   ###
@@ -372,6 +368,8 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     ### get colors for the clustering result
     original_colors_clust <- cell_pal(unique(as.character(plot_df[,original_col])), hue_pal())
     anchor_colors_clust <- original_colors_clust[unique(as.character(plot_df[,anchor_col]))]
+    original_colors_clust <- original_colors_clust[order(names(original_colors_clust))]
+    anchor_colors_clust <- anchor_colors_clust[order(names(anchor_colors_clust))]
     
     ### PCA/UMAP label
     if(dim_method[1] == "PCA") {
@@ -394,14 +392,19 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     }
     
     ### make the columns as factors
-    plot_df[,original_col] <- factor(plot_df[,original_col], levels = unique(plot_df[,original_col]))
-    plot_df[,anchor_col] <- factor(plot_df[,anchor_col], levels = unique(plot_df[,anchor_col]))
+    plot_df[,original_col] <- factor(plot_df[,original_col], levels = names(original_colors_clust))
+    plot_df[,anchor_col] <- factor(plot_df[,anchor_col], levels = names(anchor_colors_clust))
     
     ### set this globally for LabelClusters
     options(ggrepel.max.overlaps = Inf)
     
     ### create an empty list
     p <- vector("list", length = length(unique(plot_df[,anchor_col]))+2)
+    
+    ### plot options
+    base_size <- 8
+    title_sie <- 6
+    text_size <- 6
     
     #
     ### draw RNAMagnet plots coloring differently for each anchor
@@ -412,11 +415,13 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
       ggtitle(paste0("Original ", dim_method[1])) +
       xlab(x_lab) + ylab(x_lab) +
       labs(col="Cell Type") +
-      theme_classic(base_size = 16) +
+      theme_classic(base_size = base_size) +
       scale_color_manual(values = original_colors_clust,
                          labels = names(original_colors_clust)) +
-      theme(legend.title = element_text(size = 10),
-            legend.text = element_text(size = 8))
+      theme(legend.title = element_text(size = title_sie),
+            legend.text = element_text(size = text_size),
+            legend.key.size = unit(0.3, 'cm'),
+            legend.spacing = unit(0.1, 'cm'))
     ### the id column in the plot_df should be a factor
     p[[1]] <- LabelClusters(plot = p[[1]], id = original_col, col = "black")
     
@@ -426,11 +431,14 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
       ggtitle(paste0("RNAMagnet with all the directions")) +
       xlab(x_lab) + ylab(x_lab) +
       labs(col="Direction", alpha=transp_label) +
-      theme_classic(base_size = 16) +
+      theme_classic(base_size = base_size) +
       scale_color_manual(values = anchor_colors_clust,
                          labels = names(anchor_colors_clust)) +
-      theme(legend.title = element_text(size = 10),
-            legend.text = element_text(size = 8))
+      theme(legend.title = element_text(size = title_sie),
+            legend.text = element_text(size = text_size),
+            legend.key.size = unit(0.3, 'cm'),
+            legend.spacing = unit(0.1, 'cm')) +
+      guides(col = guide_legend(order = 1), alpha = guide_legend(order = 2))
     ### the id column in the plot_df should be a factor
     p[[2]] <- LabelClusters(plot = p[[2]], id = original_col, col = "black")
     for(i in 1:length(unique(plot_df[,anchor_col]))) {
@@ -442,11 +450,14 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
         ggtitle(paste0("RNAMagnet (Coloring ", names(anchor_colors_clust)[i], " only)")) +
         xlab(x_lab) + ylab(x_lab) +
         labs(col="Direction", alpha=transp_label) +
-        theme_classic(base_size = 16) +
+        theme_classic(base_size = base_size) +
         scale_color_manual(values = c(anchor_colors_clust[i], "gray"),
                            labels = c(names(anchor_colors_clust)[i], "Others")) +
-        theme(legend.title = element_text(size = 10),
-              legend.text = element_text(size = 8))
+        theme(legend.title = element_text(size = title_sie),
+              legend.text = element_text(size = text_size),
+              legend.key.size = unit(0.3, 'cm'),
+              legend.spacing = unit(0.1, 'cm')) +
+        guides(col = guide_legend(order = 1), alpha = guide_legend(order = 2))
       ### the id column in the plot_df should be a factor
       p[[i+2]] <- LabelClusters(plot = p[[i+2]], id = original_col, col = "black")
     }
@@ -512,6 +523,17 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     colors <- colorRampPalette(brewer.pal(length(uniqueV), "Spectral"))(length(uniqueV))
     names(colors) <- uniqueV
     
+    ### legend size
+    if(length(colors) > 5) {
+      legend_cex <- 0.8
+      legend_loc <- "bottomleft"
+      legend_y_inset <- -0.3
+    } else {
+      legend_cex <- 1.2
+      legend_loc <- "left"
+      legend_y_inset <- 0
+    }
+    
     ### heatmap
     png(paste0(output_directory, title, "_", dim_method[1], "_", anchor_col, "_and_", transp_col, "_Heatmap.png"),
         width = 2000, height = 1200, res = 200)
@@ -530,7 +552,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
                             nrow(heatmap_mat), " Cells x ",
                             ncol(heatmap_mat), " Directions)", "\n",
                             "[Rows: Original Cell Type, Columns: Direction]"))
-    legend("left", inset = 0, xpd = TRUE, title = "Cell Type", legend = names(colors), fill = colors, cex = 1, box.lty = 0)
+    legend(legend_loc, inset = c(0,legend_y_inset), xpd = TRUE, title = "Cell Type", legend = names(colors), fill = colors, cex = legend_cex, y.intersp = 0.8, box.lty = 0)
     dev.off()
     
   }
@@ -633,30 +655,30 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     
     ### make a scatter plot and a heatmap with the 'plot_df'
     #
-    ### Adhesiveness with the original aanotation
+    ### Adhesiveness with the original annotation
     RNAMagnet_multiple_anchor_plot(plot_df = plot_df,
                                    original_col = "cluster_color",
                                    anchor_col = "direction",
                                    transp_col = "adhesiveness",
-                                   dim_method = "UMAP",
+                                   dim_method = dim_method,
                                    title = paste0(paste(conds, collapse = "_vs_"),
                                                   "_RNAMagnet_AD"),
                                    output_directory = result_dir)
-    ### Specificity with the original aanotation
+    ### Specificity with the original annotation
     RNAMagnet_multiple_anchor_plot(plot_df = plot_df,
                                    original_col = "cluster_color",
                                    anchor_col = "direction",
                                    transp_col = "specificity",
-                                   dim_method = "UMAP",
+                                   dim_method = dim_method,
                                    title = paste0(paste(conds, collapse = "_vs_"),
                                                   "_RNAMagnet_SP"),
                                    output_directory = result_dir)
-    ### Adhesiveness with Trent's aanotation
+    ### Adhesiveness with Trent's annotation
     RNAMagnet_multiple_anchor_plot(plot_df = plot_df,
                                    original_col = "cluster_color2",
                                    anchor_col = "direction2",
                                    transp_col = "adhesiveness2",
-                                   dim_method = "UMAP",
+                                   dim_method = dim_method,
                                    title = paste0(paste(conds, collapse = "_vs_"),
                                                   "_RNAMagnet_AD"),
                                    output_directory = result_dir)
@@ -665,57 +687,63 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
                                    original_col = "cluster_color2",
                                    anchor_col = "direction2",
                                    transp_col = "specificity2",
-                                   dim_method = "UMAP",
+                                   dim_method = dim_method,
                                    title = paste0(paste(conds, collapse = "_vs_"),
                                                   "_RNAMagnet_SP"),
                                    output_directory = result_dir)
     
-    # ### scatter plot
-    # p <- list()
-    # 
-    # ### draw a scatter plot with the adhesiveness info
-    # p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
-    #   geom_point(aes_string(col="cluster_color"), size=2, alpha=0.5) +
-    #   xlab(x_lab) + ylab(x_lab) +
-    #   labs(col="Cluster") +
-    #   ggtitle(paste0("UMAP with Cell Type")) +
-    #   scale_color_brewer(palette="Dark2") +
-    #   theme_classic(base_size = 16)
-    # 
-    # ### get colors for the clustering result
-    # cell_colors_clust <- cell_pal(unique(SO@meta.data[,target_col]), hue_pal())
-    # 
-    # p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
-    #   geom_point(aes_string(col="direction", alpha="adhesiveness"), size=2) +
-    #   xlab(x_lab) + ylab(x_lab) +
-    #   labs(col="Direction", alpha="Adhesiveness") +
-    #   ggtitle(paste("UMAP with Direction & Adhesiveness")) +
-    #   theme_classic(base_size = 16) +
-    #   scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])],
-    #                      labels = names(cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])]))
-    # 
-    # ### get colors for the clustering result
-    # cell_colors_clust <- cell_pal(unique(SO@meta.data$Annotation), hue_pal())
-    # 
-    # plot_df$direction2 <- factor(plot_df$direction2, levels = unique(plot_df$direction2))
-    # p[[3]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
-    #   geom_point(aes_string(col="direction2", alpha="adhesiveness2"), size=2) +
-    #   xlab(x_lab) + ylab(x_lab) +
-    #   labs(col="Direction", alpha="Adhesiveness") +
-    #   ggtitle("UMAP with Direction & Adhesiveness") +
-    #   theme_classic(base_size = 16) +
-    #   scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction2)[order(unique(plot_df$direction2))])],
-    #                      labels = names(cell_colors_clust[as.character(unique(plot_df$direction2)[order(unique(plot_df$direction2))])]))
-    # ### the id column in the plot_df should be a factor
-    # p[[3]] <- LabelClusters(plot = p[[3]], id = "direction2", col = "black")
-    # 
-    # ### save the plots
-    # g <- arrangeGrob(grobs = p,
-    #                  nrow = 3,
-    #                  ncol = 1,
-    #                  top = "")
-    # ggsave(file = paste0(result_dir, paste(conds, collapse = "_vs_"),
-    #                      "_RNAMagnet_Result_AD.png"), g, width = 20, height = 24, dpi = 300)
+    ### scatter plot
+    p <- list()
+    
+    ### draw a scatter plot with the adhesiveness info
+    p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="cluster_color"), size=2, alpha=0.5) +
+      xlab(x_lab) + ylab(x_lab) +
+      labs(col="Cluster") +
+      ggtitle(paste0(dim_method, " with Cell Type")) +
+      scale_color_brewer(palette="Dark2") +
+      theme_classic(base_size = 16)
+
+    ### get colors for the clustering result
+    cell_colors_clust <- cell_pal(unique(SO@meta.data[,target_col]), hue_pal())
+
+    p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="direction", alpha="adhesiveness"), size=2) +
+      xlab(x_lab) + ylab(x_lab) +
+      labs(col="Direction", alpha="Adhesiveness") +
+      ggtitle(paste(dim_method, " with Direction & Adhesiveness")) +
+      theme_classic(base_size = 16) +
+      scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])],
+                         labels = names(cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])]))
+    
+    ### get colors for the clustering result
+    original_colors_clust <- cell_pal(unique(as.character(plot_df[,"cluster_color2"])), hue_pal())
+    anchor_colors_clust <- original_colors_clust[unique(as.character(plot_df[,"direction2"]))]
+    original_colors_clust <- original_colors_clust[order(names(original_colors_clust))]
+    anchor_colors_clust <- anchor_colors_clust[order(names(anchor_colors_clust))]
+    
+    ### make the columns as factors
+    plot_df[,"cluster_color2"] <- factor(plot_df[,"cluster_color2"], levels = names(original_colors_clust))
+    plot_df[,"direction2"] <- factor(plot_df[,"direction2"], levels = names(anchor_colors_clust))
+    
+    p[[3]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="direction2", alpha="adhesiveness2"), size=2) +
+      xlab(x_lab) + ylab(x_lab) +
+      labs(col="Direction", alpha="Adhesiveness") +
+      ggtitle(paste0(dim_method, " with Direction & Adhesiveness")) +
+      theme_classic(base_size = 16) +
+      scale_color_manual(values = anchor_colors_clust,
+                         labels = names(anchor_colors_clust))
+    ### the id column in the plot_df should be a factor
+    p[[3]] <- LabelClusters(plot = p[[3]], id = "cluster_color2", col = "black")
+
+    ### save the plots
+    g <- arrangeGrob(grobs = p,
+                     nrow = 3,
+                     ncol = 1,
+                     top = "")
+    ggsave(file = paste0(result_dir, paste(conds, collapse = "_vs_"),
+                         "_RNAMagnet_Result_AD.png"), g, width = 20, height = 24, dpi = 300)
     
     ### draw a beeswarm plot with the adhesiveness info
     ggplot(plot_df, aes_string(x="cluster_color", y="adhesiveness")) +
@@ -728,49 +756,45 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     ggsave(file = paste0(result_dir, paste(conds, collapse = "_vs_"),
                          "_RNAMagnet_Beeswarm_AD.png"), width = 20, height = 12, dpi = 300)
     
-    # ### draw a scatter plot with the specificity info
-    # p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
-    #   geom_point(aes_string(col="cluster_color"), size=2, alpha=0.5) +
-    #   xlab(x_lab) + ylab(x_lab) +
-    #   labs(col="Cluster") +
-    #   ggtitle(paste("UMAP with Cell Type")) +
-    #   scale_color_brewer(palette="Dark2") +
-    #   theme_classic(base_size = 16)
-    # 
-    # ### get colors for the clustering result
-    # cell_colors_clust <- cell_pal(unique(SO@meta.data[,target_col]), hue_pal())
-    # 
-    # p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
-    #   geom_point(aes_string(col="direction", alpha="specificity"), size=2) +
-    #   xlab(x_lab) + ylab(x_lab) +
-    #   labs(col="Direction", alpha="Specificity Score") +
-    #   ggtitle(paste("UMAP with Direction & Specificity Score")) +
-    #   theme_classic(base_size = 16) +
-    #   scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])],
-    #                      labels = names(cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])]))
-    # 
-    # ### get colors for the clustering result
-    # cell_colors_clust <- cell_pal(unique(SO@meta.data$Annotation), hue_pal())
-    # 
-    # plot_df$direction2 <- factor(plot_df$direction2, levels = unique(plot_df$direction2))
-    # p[[3]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
-    #   geom_point(aes_string(col="direction2", alpha="specificity2"), size=2) +
-    #   xlab(x_lab) + ylab(x_lab) +
-    #   labs(col="Direction", alpha="Specificity") +
-    #   ggtitle("UMAP with Direction & Specificity") +
-    #   theme_classic(base_size = 16) +
-    #   scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction2)[order(unique(plot_df$direction2))])],
-    #                      labels = names(cell_colors_clust[as.character(unique(plot_df$direction2)[order(unique(plot_df$direction2))])]))
-    # ### the id column in the plot_df should be a factor
-    # p[[3]] <- LabelClusters(plot = p[[3]], id = "direction2", col = "black")
-    # 
-    # ### save the plots
-    # g <- arrangeGrob(grobs = p,
-    #                  nrow = 3,
-    #                  ncol = 1,
-    #                  top = "")
-    # ggsave(file = paste0(result_dir, paste(conds, collapse = "_vs_"),
-    #                      "_RNAMagnet_Result_SP.png"), g, width = 20, height = 24, dpi = 300)
+    ### draw a scatter plot with the specificity info
+    p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="cluster_color"), size=2, alpha=0.5) +
+      xlab(x_lab) + ylab(x_lab) +
+      labs(col="Cluster") +
+      ggtitle(paste(dim_method, " with Cell Type")) +
+      scale_color_brewer(palette="Dark2") +
+      theme_classic(base_size = 16)
+
+    ### get colors for the clustering result
+    cell_colors_clust <- cell_pal(unique(SO@meta.data[,target_col]), hue_pal())
+
+    p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="direction", alpha="specificity"), size=2) +
+      xlab(x_lab) + ylab(x_lab) +
+      labs(col="Direction", alpha="Specificity Score") +
+      ggtitle(paste(dim_method, " with Direction & Specificity Score")) +
+      theme_classic(base_size = 16) +
+      scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])],
+                         labels = names(cell_colors_clust[as.character(unique(plot_df$direction)[order(unique(plot_df$direction))])]))
+
+    p[[3]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+      geom_point(aes_string(col="direction2", alpha="specificity2"), size=2) +
+      xlab(x_lab) + ylab(x_lab) +
+      labs(col="Direction", alpha="Specificity") +
+      ggtitle(paste0(dim_method, " with Direction & Specificity")) +
+      theme_classic(base_size = 16) +
+      scale_color_manual(values = anchor_colors_clust,
+                         labels = names(anchor_colors_clust))
+    ### the id column in the plot_df should be a factor
+    p[[3]] <- LabelClusters(plot = p[[3]], id = "cluster_color2", col = "black")
+
+    ### save the plots
+    g <- arrangeGrob(grobs = p,
+                     nrow = 3,
+                     ncol = 1,
+                     top = "")
+    ggsave(file = paste0(result_dir, paste(conds, collapse = "_vs_"),
+                         "_RNAMagnet_Result_SP.png"), g, width = 20, height = 24, dpi = 300)
     
     ### draw a beeswarm plot with the adhesiveness info
     ggplot(plot_df, aes_string(x="cluster_color", y="specificity")) +
@@ -864,6 +888,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   ### E16.5 LT-HSCs vs E16.5 Stroma
   ### E18.5 LT-HSCs vs E18.5 Stroma
   ### P0 LT-HSCs vs P0 Stroma
+  ### ADULT LT-HSCs vs ADULT Stroma
   
   ### set the ident of the object with the group info
   Updated_Seurat_Obj <- SetIdent(object = Updated_Seurat_Obj,
@@ -884,7 +909,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
                                target_col = "HSPC",
                                conds = c("LTHSC", "Stroma"),
-                               dim_method = "PCA",
+                               dim_method = "UMAP",
                                result_dir = paste0(outputDir2, "E16.5"))
   
   ### E18.5 LT-HSCs vs E18.5 Stroma
@@ -893,7 +918,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   
   ### check the UMAP for all the cells
   umap_plot <- DimPlot(Combined_Adult_Seurat_Obj, reduction = "umap", group.by = "Cell_Type", pt.size = 1.5) +
-    labs(title = paste0("UMAP_E16"))
+    labs(title = paste0("UMAP_E18"))
   umap_plot[[1]]$layers[[1]]$aes_params$alpha <- 0.5
   plot(umap_plot)
   
@@ -901,7 +926,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
                                target_col = "HSPC",
                                conds = c("LTHSC", "Stroma"),
-                               dim_method = "PCA",
+                               dim_method = "UMAP",
                                result_dir = paste0(outputDir2, "E18.5"))
   
   ### P0 LT-HSCs vs P0 Stroma
@@ -910,7 +935,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   
   ### check the UMAP for all the cells
   umap_plot <- DimPlot(Combined_Adult_Seurat_Obj, reduction = "umap", group.by = "Cell_Type", pt.size = 1.5) +
-    labs(title = paste0("UMAP_E16"))
+    labs(title = paste0("UMAP_P0"))
   umap_plot[[1]]$layers[[1]]$aes_params$alpha <- 0.5
   plot(umap_plot)
   
@@ -918,9 +943,25 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
                                target_col = "HSPC",
                                conds = c("LTHSC", "Stroma"),
-                               dim_method = "PCA",
+                               dim_method = "UMAP",
                                result_dir = paste0(outputDir2, "P0"))
   
+  ### ADULT LT-HSCs vs ADULT Stroma
+  ### split the Seurat obj based on the given info
+  Combined_Adult_Seurat_Obj <- subset(Updated_Seurat_Obj, idents="ADULT")
+  
+  ### check the UMAP for all the cells
+  umap_plot <- DimPlot(Combined_Adult_Seurat_Obj, reduction = "umap", group.by = "Cell_Type", pt.size = 1.5) +
+    labs(title = paste0("UMAP_ADULT"))
+  umap_plot[[1]]$layers[[1]]$aes_params$alpha <- 0.5
+  plot(umap_plot)
+  
+  ### run the RNAMagnet wrapper function
+  simple_RNAMagnet_interaction(SO = Combined_Adult_Seurat_Obj,
+                               target_col = "HSPC",
+                               conds = c("LTHSC", "Stroma"),
+                               dim_method = "UMAP",
+                               result_dir = paste0(outputDir2, "ADULT"))
   
   ### #3 analysis
   
@@ -1017,23 +1058,30 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     }))
     
     ### make a data frame for ggplot
-    plot_df <- data.frame(X=dim_map[rownames(Seurat_Object@meta.data),1],
-                          Y=dim_map[rownames(Seurat_Object@meta.data),2],
-                          cluster_color = Seurat_Object@meta.data$Group,
-                          annotation_color = Seurat_Object@meta.data$Annotation,
-                          direction = Seurat_Object@meta.data$direction,
-                          direction2 = Seurat_Object@meta.data$direction2,
-                          adhesiveness = Seurat_Object@meta.data$adhesiveness,
-                          adhesiveness2 = Seurat_Object@meta.data$adhesiveness2,
-                          specificity = Seurat_Object@meta.data$specificity,
-                          specificity2 = Seurat_Object@meta.data$specificity2,
+    plot_df <- data.frame(X=dim_map[rownames(SO@meta.data),1],
+                          Y=dim_map[rownames(SO@meta.data),2],
+                          cluster_color = SO@meta.data[,target_col],
+                          cluster_color2 = SO@meta.data$Annotation,
+                          direction = SO@meta.data$direction,
+                          direction2 = SO@meta.data$direction2,
+                          adhesiveness = SO@meta.data$adhesiveness,
+                          adhesiveness2 = SO@meta.data$adhesiveness2,
+                          specificity = SO@meta.data$specificity,
+                          specificity2 = SO@meta.data$specificity2,
                           stringsAsFactors = FALSE, check.names = FALSE)
-    
-    ### get colors for the clustering result
-    cell_colors_clust <- cell_pal(unique(Seurat_Object@meta.data$Annotation), hue_pal())
     
     ### scatter plot
     p <- list()
+    
+    ### get colors for the clustering result
+    original_colors_clust <- cell_pal(unique(as.character(plot_df[,"cluster_color2"])), hue_pal())
+    anchor_colors_clust <- original_colors_clust[unique(as.character(plot_df[,"direction2"]))]
+    original_colors_clust <- original_colors_clust[order(names(original_colors_clust))]
+    anchor_colors_clust <- anchor_colors_clust[order(names(anchor_colors_clust))]
+    
+    ### make the columns as factors
+    plot_df[,"cluster_color2"] <- factor(plot_df[,"cluster_color2"], levels = names(original_colors_clust))
+    plot_df[,"direction2"] <- factor(plot_df[,"direction2"], levels = names(anchor_colors_clust))
     
     ### draw a scatter plot with the adhesiveness info
     p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
@@ -1045,13 +1093,13 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
       theme_classic(base_size = 16)
     
     p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
-      geom_point(aes_string(col="annotation_color"), size=2, alpha=0.5) +
+      geom_point(aes_string(col="cluster_color2"), size=2, alpha=0.5) +
       xlab(x_lab) + ylab(y_lab) +
       labs(col="Cluster") +
       ggtitle("UMAP with Cell Type") +
       theme_classic(base_size = 16)
     ### the id column in the plot_df should be a factor
-    p[[2]] <- LabelClusters(plot = p[[2]], id = "annotation_color", col = "black")
+    p[[2]] <- LabelClusters(plot = p[[2]], id = "cluster_color2", col = "black")
     
     p[[3]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
       geom_point(aes_string(col="direction", alpha="adhesiveness"), size=2) +
@@ -1061,17 +1109,16 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
       scale_color_brewer(palette="Set1") +
       theme_classic(base_size = 16)
     
-    plot_df$direction2 <- factor(plot_df$direction2, levels = unique(plot_df$direction2))
     p[[4]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
       geom_point(aes_string(col="direction2", alpha="adhesiveness2"), size=2) +
       xlab(x_lab) + ylab(y_lab) +
       labs(col="Direction", alpha="Adhesiveness") +
       ggtitle("UMAP with Direction & Adhesiveness") +
       theme_classic(base_size = 16) +
-      scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction2)[order(unique(plot_df$direction2))])],
-                         labels = names(cell_colors_clust[as.character(unique(plot_df$direction2)[order(unique(plot_df$direction2))])]))
+      scale_color_manual(values = anchor_colors_clust,
+                         labels = names(anchor_colors_clust))
     ### the id column in the plot_df should be a factor
-    p[[4]] <- LabelClusters(plot = p[[4]], id = "direction2", col = "black")
+    p[[4]] <- LabelClusters(plot = p[[4]], id = "cluster_color2", col = "black")
     
     ### save the plots
     g <- arrangeGrob(grobs = p,
@@ -1091,13 +1138,13 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
       theme_classic(base_size = 16)
     
     p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
-      geom_point(aes_string(col="annotation_color"), size=2, alpha=0.5) +
+      geom_point(aes_string(col="cluster_color2"), size=2, alpha=0.5) +
       xlab(x_lab) + ylab(y_lab) +
       labs(col="Cluster") +
       ggtitle("UMAP with Cell Type") +
       theme_classic(base_size = 16)
     ### the id column in the plot_df should be a factor
-    p[[2]] <- LabelClusters(plot = p[[2]], id = "annotation_color", col = "black")
+    p[[2]] <- LabelClusters(plot = p[[2]], id = "cluster_color2", col = "black")
     
     p[[3]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
       geom_point(aes_string(col="direction", alpha="specificity"), size=2) +
@@ -1107,17 +1154,16 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
       scale_color_brewer(palette="Set1") +
       theme_classic(base_size = 16)
     
-    plot_df$direction2 <- factor(plot_df$direction2, levels = unique(plot_df$direction2))
     p[[4]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
       geom_point(aes_string(col="direction2", alpha="specificity2"), size=2) +
       xlab(x_lab) + ylab(y_lab) +
       labs(col="Direction", alpha="Specificity") +
       ggtitle("UMAP with Direction & Specificity") +
       theme_classic(base_size = 16) +
-      scale_color_manual(values = cell_colors_clust[as.character(unique(plot_df$direction2)[order(unique(plot_df$direction2))])],
-                         labels = names(cell_colors_clust[as.character(unique(plot_df$direction2)[order(unique(plot_df$direction2))])]))
+      scale_color_manual(values = anchor_colors_clust,
+                         labels = names(anchor_colors_clust))
     ### the id column in the plot_df should be a factor
-    p[[4]] <- LabelClusters(plot = p[[4]], id = "direction2", col = "black")
+    p[[4]] <- LabelClusters(plot = p[[4]], id = "cluster_color2", col = "black")
     
     ### save the plots
     g <- arrangeGrob(grobs = p,
@@ -1126,6 +1172,77 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
                      top = "")
     ggsave(file = paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
                          "_RNAMagnet_Result_SP_", time_point, "_New_Annotation.png"), g, width = 28, height = 20, dpi = 300)
+    
+    ### make a scatter plot and a heatmap with the 'plot_df'
+    #
+    ### Adhesiveness with the original annotation
+    RNAMagnet_multiple_anchor_plot(plot_df = plot_df,
+                                   original_col = "cluster_color",
+                                   anchor_col = "direction",
+                                   transp_col = "adhesiveness",
+                                   dim_method = dim_method,
+                                   title = paste0(paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                                   "_RNAMagnet_Result_AD_", time_point, "_Original_Annotation"),
+                                   output_directory = result_dir)
+    ### Specificity with the original annotation
+    RNAMagnet_multiple_anchor_plot(plot_df = plot_df,
+                                   original_col = "cluster_color",
+                                   anchor_col = "direction",
+                                   transp_col = "specificity",
+                                   dim_method = dim_method,
+                                   title = paste0(paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                                                  "_RNAMagnet_Result_SP_", time_point, "_Original_Annotation"),
+                                   output_directory = result_dir)
+    ### Adhesiveness with Trent's annotation
+    RNAMagnet_multiple_anchor_plot(plot_df = plot_df,
+                                   original_col = "cluster_color2",
+                                   anchor_col = "direction2",
+                                   transp_col = "adhesiveness2",
+                                   dim_method = dim_method,
+                                   title = paste0(paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                                                  "_RNAMagnet_Result_AD_", time_point, "_NEW_Annotation"),
+                                   output_directory = result_dir)
+    ### Specificity with Trent's aanotation
+    RNAMagnet_multiple_anchor_plot(plot_df = plot_df,
+                                   original_col = "cluster_color2",
+                                   anchor_col = "direction2",
+                                   transp_col = "specificity2",
+                                   dim_method = dim_method,
+                                   title = paste0(paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                                                  "_RNAMagnet_Result_SP_", time_point, "_NEW_Annotation"),
+                                   output_directory = result_dir)
+    
+    ### run RNAMagnet signaling
+    Seurat_Object <- SetIdent(object = Seurat_Object,
+                              cells = rownames(Seurat_Object@meta.data),
+                              value = Seurat_Object@meta.data$Annotation)
+    result <- RNAMagnetSignaling(Seurat_Object)
+    
+    ### get all the interaction list
+    interaction_list <- NULL
+    for(clust1 in conds) {
+      for(clust2 in conds) {
+        il <- getRNAMagnetGenes(result, clust1, clust2, thresh = 0)
+        if(nrow(il) > 0) {
+          il$ligand_cluster <- clust1
+          il$receptor_cluster <- clust2
+          if(is.null(interaction_list)) {
+            interaction_list <- il
+          } else {
+            interaction_list <- rbind(interaction_list, il)
+          }
+        }
+      }
+    }
+    interaction_list <- cbind(interaction_list[3:4], interaction_list[1:2])
+    colnames(interaction_list) <- c("Ligand_Cluster", "Receptor_Cluster", "Interaction_Score", "Interaction_Pair")
+    
+    ### write out the interaction list
+    write.xlsx2(interaction_list,
+                file = paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
+                              "_Signaling_RNAMagnet_Interaction_List_", time_point, "_New_Annotation.xlsx"),
+                sheetName = paste0("Signaling_RNAMagnet_Interaction_List"),
+                row.names = FALSE)
     
   }
   
