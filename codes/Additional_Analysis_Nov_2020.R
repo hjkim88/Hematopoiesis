@@ -14,11 +14,11 @@
 #   Example
 #               > source("The_directory_of_Additional_Analysis_Oct_2020.R/Additional_Analysis_Oct_2020.R")
 #               > additional_analysis(Robj_path="./data/Combined_Seurat_Obj.RDS",
-#                                     outputDir="./results/Additional_Nov2020/")
+#                                     outputDir="./results/Additional_Nov2020/NEW/")
 ###
 
 additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
-                                outputDir="./results/Additional_Nov2020/") {
+                                outputDir="./results/Additional_Nov2020/NEW/") {
   
   ### load libraries
   if(!require(Seurat, quietly = TRUE)) {
@@ -1260,10 +1260,69 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     interaction_list <- cbind(interaction_list[3:4], interaction_list[1:2])
     colnames(interaction_list) <- c("Ligand_Cluster", "Receptor_Cluster", "Interaction_Score", "Interaction_Pair")
     
+    ### permutation p-value
+    iteration_num <- 10
+    set.seed(2990)
+    random_value_list <- NULL
+    unique_anchors <- unique(Seurat_Object@meta.data[,target_col])
+    unique_anchor_nums <- sapply(unique_anchors, function(x) length(which(Seurat_Object@meta.data[,target_col] == x)))
+    for(i in 1:iteration_num) {
+      
+      ### set random anchors similar to the original
+      random_anchors <- rep("", sum(unique_anchor_nums))
+      for(anchor in unique_anchors) {
+        random_anchors[sample(which(random_anchors == ""), unique_anchor_nums[anchor])] <- anchor
+      }
+      
+      ### run RNAMagnet signaling with random anchors
+      Seurat_Object <- SetIdent(object = Seurat_Object,
+                                cells = rownames(Seurat_Object@meta.data),
+                                value = random_anchors)
+      random_result <- RNAMagnetSignaling(Seurat_Object)
+      
+      ### get all the interaction list
+      temp_list <- NULL
+      for(clust1 in unique(Seurat_Object@meta.data[,target_col])) {
+        for(clust2 in unique(Seurat_Object@meta.data[,target_col])) {
+          il <- getRNAMagnetGenes(result3, clust1, clust2, thresh = 0)
+          if(nrow(il) > 0) {
+            il$ligand_cluster <- clust1
+            il$receptor_cluster <- clust2
+            if(is.null(temp_list)) {
+              temp_list <- il
+            } else {
+              temp_list <- rbind(temp_list, il)
+            }
+          }
+        }
+      }
+      temp_list <- cbind(temp_list[3:4], temp_list[1:2])
+      colnames(temp_list) <- c("Ligand_Cluster", "Receptor_Cluster", "Interaction_Score", "Interaction_Pair")
+      
+      if(is.null(random_value_list)) {
+        random_value_list <- temp_list
+      } else {
+        random_value_list <- rbind(random_value_list, temp_list)
+      }
+      
+    }
+    random_value_list <- random_value_list$Interaction_Score
+    random_value_list <- random_value_list[order(-random_value_list)]
+    
+    ### give permutation p-value
+    interaction_list$Score_P_Val <- NA
+    for(i in 1:nrow(interaction_list)) {
+      interaction_list$Score_P_Val[i] <- round(length(which(random_value_list >= interaction_list$Interaction_Score[i]))/length(random_value_list),
+                                               digits = 5)
+    }
+    
+    ### change the order of the column in the list
+    interaction_list <- interaction_list[,c("Ligand_Cluster", "Receptor_Cluster", "Interaction_Score", "Score_P_Val", "Interaction_Pair")]
+    
     ### write out the interaction list
     write.xlsx2(interaction_list,
                 file = paste0(result_dir, paste(comp1, collapse = "_"), "_vs_", paste(comp2, collapse = "_"),
-                              "_Signaling_RNAMagnet_Interaction_List_", time_point, "_Original_Annotation.xlsx"),
+                              "_Signaling_RNAMagnet_Interaction_List_", time_point, "_Original_Annotation2.xlsx"),
                 sheetName = paste0("Signaling_RNAMagnet_Interaction_List"),
                 row.names = FALSE)
     
