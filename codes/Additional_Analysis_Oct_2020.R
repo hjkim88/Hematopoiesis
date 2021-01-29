@@ -323,10 +323,10 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
             points(centers[clusters %in% const, dims,
                            drop=FALSE], cex = cex / 2,
                    col = constraints.col[const], pch = 16)
-            text(x = centers[clusters %in% const, dims[1]]+0.5,
-                 y = centers[clusters %in% const, dims[2]]+1,
+            text(x = centers[clusters %in% const, dims[1]]+0,
+                 y = centers[clusters %in% const, dims[2]]+8,
                  labels = const,
-                 cex = cex / 3,
+                 cex = cex / 2,
                  col = "black")
           }
         }
@@ -2253,12 +2253,12 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
   cell_colors_clust <- cell_pal(unique(subset_Seurat_Obj2@meta.data$Development), hue_pal())
   
   ### Trajectory inference
-  png(paste0(outputDir2, "Trajectory_Inference_Without_Adult_PCA.png"), width = 2500, height = 1500, res = 200)
+  png(paste0(outputDir2, "Trajectory_Inference_Without_Adult_PCA.png"), width = 1800, height = 1200, res = 300)
   plot(reducedDim(slingshot_obj),
        main=paste(type, "Trajectory Inference Without Adult"),
        col = cell_colors_clust[subset_Seurat_Obj2@meta.data$Development],
        pch = 19, cex = 1)
-  lines(slingshot_obj, lwd = 2, type = "lineages", col = "black",
+  lines(slingshot_obj, lwd = 3, type = "lineages", col = "black",
         show.constraints = TRUE, constraints.col = cell_colors_clust)
   legend("bottomleft", legend = names(cell_colors_clust), col = cell_colors_clust,
          pch = 19)
@@ -2328,14 +2328,14 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
   cell_colors_clust <- cell_pal(unique(subset_Seurat_Obj2@meta.data$Development), hue_pal())
   
   ### Trajectory inference
-  png(paste0(outputDir2, "Trajectory_Inference_Without_Adult_PCA.png"), width = 2500, height = 1500, res = 200)
+  png(paste0(outputDir2, "Trajectory_Inference_Without_Adult_PCA.png"), width = 1800, height = 1200, res = 300)
   plot(reducedDim(slingshot_obj),
        main=paste(type, "Trajectory Inference Without Adult"),
        col = cell_colors_clust[subset_Seurat_Obj2@meta.data$Development],
        pch = 19, cex = 1)
-  lines(slingshot_obj, lwd = 2, type = "lineages", col = "black",
+  lines(slingshot_obj, lwd = 3, type = "lineages", col = "black",
         show.constraints = TRUE, constraints.col = cell_colors_clust)
-  legend("bottomleft", legend = names(cell_colors_clust), col = cell_colors_clust,
+  legend("topleft", legend = names(cell_colors_clust), col = cell_colors_clust,
          pch = 19)
   dev.off()
   
