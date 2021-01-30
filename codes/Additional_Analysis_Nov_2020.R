@@ -335,6 +335,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   
   ### hierarchical clustering functions
   dist.spear <- function(x) as.dist(1-cor(t(x), method = "spearman"))
+  dist.euclidean <- function(x) dist(x, method = "euclidean")
   hclust.ave <- function(x) hclust(x, method="average")
   
   ### A function that creates mupliple plots with highliting
@@ -352,6 +353,8 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   #                       specificity = SO@meta.data$specificity,
   #                       specificity2 = SO@meta.data$specificity2,
   #                       stringsAsFactors = FALSE, check.names = FALSE)
+  ### comp1: the first condition of the comparison (this will be used in drawing the heatmap)
+  ### comp2: the second condition of the comparison (this will be used in drawing the heatmap)
   ### original_col: the column name of plot_df that shows the original cell type
   ### anchor_col: the column name of plot_df that will be colored in the plots (Direction)
   ### transp_col: adhesiveness/specificity column of the plot_df that will be represented with transparency
@@ -365,6 +368,8 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
   ### anchor_col = "direction2"
   ### transp_col = "adhesiveness2"
   RNAMagnet_multiple_anchor_plot <- function(plot_df,
+                                             comp1,
+                                             comp2,
                                              original_col,
                                              anchor_col,
                                              transp_col,
@@ -528,17 +533,35 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     ### transparency: adhesiveness/specificity
     #
     ### make a matrix for the heatmap
-    heatmap_mat <- matrix(0, nrow(plot_df), length(unique(as.character(plot_df[,original_col]))))
-    rownames(heatmap_mat) <- rownames(plot_df)
-    colnames(heatmap_mat) <- unique(as.character(plot_df[,original_col]))
+    comp1 <- as.character(unique(plot_df[which(plot_df[,"cluster_color"] %in% comp1),original_col]))
+    comp2 <- as.character(unique(plot_df[which(plot_df[,"cluster_color"] %in% comp2),original_col]))
+    comp1 <- comp1[order(comp1)]
+    comp2 <- comp2[order(comp2)]
+    heatmap_mat <- matrix(0,
+                          nrow(plot_df[which(plot_df[,original_col] %in% comp1),,drop=FALSE]),
+                          length(comp2))
+    rownames(heatmap_mat) <- rownames(plot_df[which(plot_df[,original_col] %in% comp1),,drop=FALSE])
+    colnames(heatmap_mat) <- comp2
     
     ### fill the matrix
-    for(i in 1:nrow(heatmap_mat)) {
-      heatmap_mat[i,as.character(plot_df[i,anchor_col])] <- as.numeric(plot_df[i,transp_col])
+    for(cellName in rownames(heatmap_mat)) {
+      cell_direction <- as.character(plot_df[cellName,anchor_col])
+      if(length(which(comp2 %in% cell_direction)) > 0) {
+        heatmap_mat[cellName,cell_direction] <- as.numeric(plot_df[cellName,transp_col])
+      }
     }
     
-    ### set rowside colors
-    uniqueV <- unique(as.character(plot_df[,original_col]))
+    ### ordering the rows of the heatmap
+    ordered_row <- data.frame(CellName=rownames(heatmap_mat),
+                              Type=as.character(plot_df[rownames(heatmap_mat),original_col]),
+                              stringsAsFactors = FALSE, check.names = FALSE)
+    ordered_row <- ordered_row[order(ordered_row$Type),]
+    heatmap_mat <- heatmap_mat[ordered_row$CellName,,drop=FALSE]
+    
+    ### set side colors
+    unique_columns <- colnames(heatmap_mat)
+    unique_columns <- unique_columns[order(unique_columns)]
+    uniqueV <- c(unique(ordered_row$Type), unique_columns)
     colors <- colorRampPalette(brewer.pal(length(uniqueV), "Spectral"))(length(uniqueV))
     names(colors) <- uniqueV
     
@@ -547,8 +570,7 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
       legend_cex <- 0.6
       legend_loc <- "bottomleft"
       legend_y_inset <- -0.3
-    }
-    else if(length(colors) > 5) {
+    } else if(length(colors) > 5) {
       legend_cex <- 0.8
       legend_loc <- "bottomleft"
       legend_y_inset <- -0.3
@@ -562,19 +584,72 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     png(paste0(output_directory, title, "_", dim_method[1], "_", anchor_col, "_and_", transp_col, "_Heatmap.png"),
         width = 2000, height = 1200, res = 200)
     par(oma=c(3,0,3,0))
-    heatmap.2(heatmap_mat,
-              xlab = "", ylab = "", col=colorpanel(10, low = "white", high = "black"),
-              scale="none", key=TRUE, key.title = transp_label, keysize=1.5, density.info="density",
-              dendrogram = "none", trace = "none",
-              labRow = FALSE, labCol = colnames(heatmap_mat),
-              Rowv = TRUE, Colv = FALSE,
-              distfun=dist.spear, hclustfun=hclust.ave,
-              RowSideColors = rbind(colors[as.character(plot_df[,original_col])]),
-              ColSideColors = cbind(colors[as.character(colnames(heatmap_mat))]),
-              cexRow = 1.5, cexCol = 1.5, na.rm = TRUE,
-              main = paste0(nrow(heatmap_mat), " Cells x ",
-                            ncol(heatmap_mat), " Directions", "\n",
-                            "[Rows: Original Cell Type, Columns: Direction]"))
+    ### there can be a case that no comp1 cells are direct toward comp2 directions
+    if(length(which(heatmap_mat == 0)) == length(heatmap_mat)) {
+      ### heatmap.2 can't draw one with one column matrix
+      if(ncol(heatmap_mat) == 1) {
+        heatmap.2(cbind(heatmap_mat, heatmap_mat),
+                  xlab = "", ylab = "", col=colorpanel(10, low = "white", high = "black"),
+                  scale="none", key=FALSE, key.title = transp_label, keysize=1.5, density.info="density",
+                  dendrogram = "none", trace = "none",
+                  labRow = FALSE, labCol = FALSE,
+                  Rowv = FALSE, Colv = FALSE,
+                  distfun=dist.euclidean, hclustfun=hclust.ave,
+                  RowSideColors = rbind(colors[as.character(plot_df[rownames(heatmap_mat),original_col])]),
+                  ColSideColors = cbind(colors[as.character(colnames(heatmap_mat))],
+                                        colors[as.character(colnames(heatmap_mat))]),
+                  cexRow = 1.5, cexCol = 1.5, na.rm = TRUE,
+                  main = paste0(nrow(heatmap_mat), " Cells x ",
+                                "1", " Direction", "\n",
+                                "[Rows: Original Cell Type, Columns: Direction]"))
+      } else {
+        heatmap.2(heatmap_mat,
+                  xlab = "", ylab = "", col=colorpanel(10, low = "white", high = "black"),
+                  scale="none", key=FALSE, key.title = transp_label, keysize=1.5, density.info="density",
+                  dendrogram = "none", trace = "none",
+                  labRow = FALSE, labCol = colnames(heatmap_mat),
+                  Rowv = FALSE, Colv = FALSE,
+                  distfun=dist.euclidean, hclustfun=hclust.ave,
+                  RowSideColors = rbind(colors[as.character(plot_df[rownames(heatmap_mat),original_col])]),
+                  ColSideColors = cbind(colors[as.character(colnames(heatmap_mat))]),
+                  cexRow = 1.5, cexCol = 1.5, na.rm = TRUE,
+                  main = paste0(nrow(heatmap_mat), " Cells x ",
+                                ncol(heatmap_mat), " Directions", "\n",
+                                "[Rows: Original Cell Type, Columns: Direction]"))
+      }
+    } else {
+      ### heatmap.2 can't draw one with one column matrix
+      if(ncol(heatmap_mat) == 1) {
+        heatmap.2(cbind(heatmap_mat, heatmap_mat),
+                  xlab = "", ylab = "", col=colorpanel(10, low = "white", high = "black"),
+                  scale="none", key=TRUE, key.title = transp_label, keysize=1.5, density.info="density",
+                  dendrogram = "none", trace = "none",
+                  labRow = FALSE, labCol = FALSE,
+                  Rowv = FALSE, Colv = FALSE,
+                  distfun=dist.euclidean, hclustfun=hclust.ave,
+                  RowSideColors = rbind(colors[as.character(plot_df[rownames(heatmap_mat),original_col])]),
+                  ColSideColors = cbind(colors[as.character(colnames(heatmap_mat))],
+                                        colors[as.character(colnames(heatmap_mat))]),
+                  cexRow = 1.5, cexCol = 1.5, na.rm = TRUE,
+                  main = paste0(nrow(heatmap_mat), " Cells x ",
+                                "1", " Direction", "\n",
+                                "[Rows: Original Cell Type, Columns: Direction]"))
+      } else {
+        heatmap.2(heatmap_mat,
+                  xlab = "", ylab = "", col=colorpanel(10, low = "white", high = "black"),
+                  scale="none", key=TRUE, key.title = transp_label, keysize=1.5, density.info="density",
+                  dendrogram = "none", trace = "none",
+                  labRow = FALSE, labCol = colnames(heatmap_mat),
+                  Rowv = FALSE, Colv = FALSE,
+                  distfun=dist.euclidean, hclustfun=hclust.ave,
+                  RowSideColors = rbind(colors[as.character(plot_df[rownames(heatmap_mat),original_col])]),
+                  ColSideColors = cbind(colors[as.character(colnames(heatmap_mat))]),
+                  cexRow = 1.5, cexCol = 1.5, na.rm = TRUE,
+                  main = paste0(nrow(heatmap_mat), " Cells x ",
+                                ncol(heatmap_mat), " Directions", "\n",
+                                "[Rows: Original Cell Type, Columns: Direction]"))
+      }
+    }
     legend(legend_loc, inset = c(0,legend_y_inset), xpd = TRUE, title = "Cell Type", legend = names(colors), fill = colors, cex = legend_cex, y.intersp = 0.8, box.lty = 0)
     dev.off()
     
@@ -680,6 +755,8 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     #
     ### Adhesiveness with the original annotation
     RNAMagnet_multiple_anchor_plot(plot_df = plot_df,
+                                   comp1 = conds[1],
+                                   comp2 = conds[2],
                                    original_col = "cluster_color",
                                    anchor_col = "direction",
                                    transp_col = "adhesiveness",
@@ -689,6 +766,8 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
                                    output_directory = result_dir)
     ### Specificity with the original annotation
     RNAMagnet_multiple_anchor_plot(plot_df = plot_df,
+                                   comp1 = conds[1],
+                                   comp2 = conds[2],
                                    original_col = "cluster_color",
                                    anchor_col = "direction",
                                    transp_col = "specificity",
@@ -698,6 +777,8 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
                                    output_directory = result_dir)
     ### Adhesiveness with Trent's annotation
     RNAMagnet_multiple_anchor_plot(plot_df = plot_df,
+                                   comp1 = conds[1],
+                                   comp2 = conds[2],
                                    original_col = "cluster_color2",
                                    anchor_col = "direction2",
                                    transp_col = "adhesiveness2",
@@ -707,6 +788,8 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
                                    output_directory = result_dir)
     ### Specificity with Trent's aanotation
     RNAMagnet_multiple_anchor_plot(plot_df = plot_df,
+                                   comp1 = conds[1],
+                                   comp2 = conds[2],
                                    original_col = "cluster_color2",
                                    anchor_col = "direction2",
                                    transp_col = "specificity2",
@@ -1200,6 +1283,8 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
     #
     ### Adhesiveness with the original annotation
     RNAMagnet_multiple_anchor_plot(plot_df = plot_df,
+                                   comp1 = comp1,
+                                   comp2 = comp2,
                                    original_col = "cluster_color",
                                    anchor_col = "direction",
                                    transp_col = "adhesiveness",
@@ -1209,6 +1294,8 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
                                    output_directory = result_dir)
     ### Specificity with the original annotation
     RNAMagnet_multiple_anchor_plot(plot_df = plot_df,
+                                   comp1 = comp1,
+                                   comp2 = comp2,
                                    original_col = "cluster_color",
                                    anchor_col = "direction",
                                    transp_col = "specificity",
@@ -1218,6 +1305,8 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
                                    output_directory = result_dir)
     ### Adhesiveness with Trent's annotation
     RNAMagnet_multiple_anchor_plot(plot_df = plot_df,
+                                   comp1 = comp1,
+                                   comp2 = comp2,
                                    original_col = "cluster_color2",
                                    anchor_col = "direction2",
                                    transp_col = "adhesiveness2",
@@ -1227,6 +1316,8 @@ additional_analysis <- function(Robj_path="./data/Combined_Seurat_Obj.RDS",
                                    output_directory = result_dir)
     ### Specificity with Trent's annotation
     RNAMagnet_multiple_anchor_plot(plot_df = plot_df,
+                                   comp1 = comp1,
+                                   comp2 = comp2,
                                    original_col = "cluster_color2",
                                    anchor_col = "direction2",
                                    transp_col = "specificity2",
