@@ -286,6 +286,36 @@ rnamagnet_pv_cal <- function(Robj_path="./data/New_Objects/AdultStromavLTHSC_NA.
                                                            digits = 8)
   }
   
+  ### calculate adjusted p-values
+  RNAMagnet_Anchors_Result$Specificity_P_Adj <- p.adjust(RNAMagnet_Anchors_Result$Specificity_P_Val,
+                                                         method = "bonferroni")
+  
+  ### define significance
+  cut_off <- 0.05
+  RNAMagnet_Anchors_Result$Specificity_Significance <- sapply(RNAMagnet_Anchors_Result$Specificity_P_Adj, function(x) {
+    if(x < cut_off) {
+      return("Significant")
+    } else {
+      return("Not_Significant")
+    }
+  })
+  
+  ### attach the result to the seurat meta.data
+  Seurat_Obj@meta.data <- merge(x = Seurat_Obj@meta.data,
+                                y = RNAMagnet_Anchors_Result,
+                                by = "row.names")
+  rownames(Seurat_Obj@meta.data) <- Seurat_Obj@meta.data$Row.names
+  Seurat_Obj@meta.data <- Seurat_Obj@meta.data[,-1]
+  
+  ### order the meta.data based on the adj.p
+  Seurat_Obj@meta.data <- Seurat_Obj@meta.data[order(Seurat_Obj@meta.data$Specificity_P_Adj),]
+  
+  ### order the result based on adj.p
+  RNAMagnet_Anchors_Result <- RNAMagnet_Anchors_Result[order(RNAMagnet_Anchors_Result$Specificity_P_Adj),]
+  
+  ### annotate original class to the result
+  RNAMagnet_Anchors_Result$Annotation2 <- Seurat_Obj@meta.data[rownames(RNAMagnet_Anchors_Result),"Annotation2"]
+  
   ### write out the result
   dir.create(outputDir, showWarnings = FALSE, recursive = TRUE)
   write.xlsx2(data.frame(Cell=rownames(RNAMagnet_Anchors_Result), RNAMagnet_Anchors_Result,
@@ -297,6 +327,16 @@ rnamagnet_pv_cal <- function(Robj_path="./data/New_Objects/AdultStromavLTHSC_NA.
                                 paste(unique_anchors, collapse = "_")),
               row.names = FALSE)
   gc()
+  
+  ### get specificity value that generates the cut_off adj.p
+  attr(Seurat_Obj,"Specificity_Cut_Off") <- random_value_list[ceiling(length(random_value_list) * cut_off)]
+  
+  ### print out the specificity cut_off
+  writeLines(paste(basename(Robj_path), "Specificity_Cut_Off:", Seurat_Obj@Specificity_Cut_Off))
+  
+  ### save the seurat object
+  saveRDS(Seurat_Obj,
+          file = paste0(outputDir, substring(basename(Robj_path), 1, nchar(basename(Robj_path))-5), ".RDS"))
   
 }
 
