@@ -2203,7 +2203,7 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
   #
   
   ### remove ADULT cells
-  subset_Seurat_Obj <- subset(Combined_Seurat_Obj, idents = unique_idents[-which(unique_idents == "ADULT")]) 
+  subset_Seurat_Obj <- subset(Combined_Seurat_Obj, idents = unique_idents[-which(unique_idents == "ADULT")])
   
   ### rownames in the meta.data should be in the same order as colnames in the counts
   subset_Seurat_Obj@assays$RNA@counts <- subset_Seurat_Obj@assays$RNA@counts[,rownames(subset_Seurat_Obj@meta.data)]
