@@ -1,11 +1,10 @@
 ### Analyses for Trent - 04/26/2021
 
-### modify multiple analyses in one
-### include more plot types and remove heatmap
 ### monocle plot_complex_cell_trajectory modify
 
 ### set paths
 Robj1_path="./data/Combined_Seurat_Obj.RDATA"
+Robj2_path="./data/Combined_Seurat_Obj.RDS"
 outputDir="./results/Apr_2021/"
 
 dir.create(outputDir, showWarnings = FALSE, recursive = TRUE)
@@ -82,6 +81,12 @@ if(!require(enrichplot, quietly = TRUE)) {
     install.packages("BiocManager")
   BiocManager::install("enrichplot")
   require(enrichplot, quietly = TRUE)
+}
+if(!require(monocle, quietly = TRUE)) {
+  if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+  BiocManager::install("monocle")
+  require(monocle, quietly = TRUE)
 }
 
 
@@ -1314,6 +1319,41 @@ legend("bottomleft", legend = names(cell_colors_clust), col = cell_colors_clust,
        pch = 19)
 dev.off()
 
+### Construct a monocle cds
+monocle_cds <- newCellDataSet(as(as.matrix(subset_Seurat_Obj2@assays$RNA@data), 'sparseMatrix'),
+                              phenoData = new('AnnotatedDataFrame', data = subset_Seurat_Obj2@meta.data),
+                              featureData = new('AnnotatedDataFrame', data = data.frame(gene_short_name = row.names(subset_Seurat_Obj2@assays$RNA@data),
+                                                                                        row.names = row.names(subset_Seurat_Obj2@assays$RNA@data),
+                                                                                        stringsAsFactors = FALSE, check.names = FALSE)),
+                              lowerDetectionLimit = 0.5,
+                              expressionFamily = negbinomial.size())
+
+### run monocle
+monocle_cds <- estimateSizeFactors(monocle_cds)
+monocle_cds <- estimateDispersions(monocle_cds)
+monocle_cds <- reduceDimension(monocle_cds, reduction_method = "DDRTree")
+monocle_cds <- orderCells(monocle_cds)
+
+### draw monocle plots
+p <- plot_cell_trajectory(monocle_cds, color_by = "Development", cell_size = 5, cell_link_size = 3, show_branch_points = FALSE) +
+  labs(color="") +
+  theme_classic(base_size = 36) +
+  theme(legend.position = "top",
+        legend.title = element_text(size = 36),
+        legend.text = element_text(size = 30))
+ggsave(file = paste0(outputDir2, "Trajectory_Inference_Without_Adult_Monocle2.png"),
+       plot = p,
+       width = 15, height = 10, dpi = 350)
+
+p <- plot_complex_cell_trajectory(monocle_cds, color_by = "Development", cell_size = 5, cell_link_size = 3, show_branch_points = FALSE) +
+  labs(color="") +
+  theme_classic(base_size = 36) +
+  theme(legend.position = "top",
+        legend.title = element_text(size = 36),
+        legend.text = element_text(size = 30))
+ggsave(file = paste0(outputDir2, "Trajectory_Inference_Without_Adult_Complex_Monocle2.png"),
+       plot = p,
+       width = 15, height = 10, dpi = 350)
 
 ### DE & pathway analyses
 #
@@ -1371,6 +1411,41 @@ legend("topleft", legend = names(cell_colors_clust), col = cell_colors_clust,
        pch = 19)
 dev.off()
 
+### Construct a monocle cds
+monocle_cds <- newCellDataSet(as(as.matrix(subset_Seurat_Obj2@assays$RNA@data), 'sparseMatrix'),
+                              phenoData = new('AnnotatedDataFrame', data = subset_Seurat_Obj2@meta.data),
+                              featureData = new('AnnotatedDataFrame', data = data.frame(gene_short_name = row.names(subset_Seurat_Obj2@assays$RNA@data),
+                                                                                        row.names = row.names(subset_Seurat_Obj2@assays$RNA@data),
+                                                                                        stringsAsFactors = FALSE, check.names = FALSE)),
+                              lowerDetectionLimit = 0.5,
+                              expressionFamily = negbinomial.size())
+
+### run monocle
+monocle_cds <- estimateSizeFactors(monocle_cds)
+monocle_cds <- estimateDispersions(monocle_cds)
+monocle_cds <- reduceDimension(monocle_cds, reduction_method = "DDRTree")
+monocle_cds <- orderCells(monocle_cds)
+
+### draw monocle plots
+p <- plot_cell_trajectory(monocle_cds, color_by = "Development", cell_size = 5, cell_link_size = 3, show_branch_points = FALSE) +
+  labs(color="") +
+  theme_classic(base_size = 36) +
+  theme(legend.position = "top",
+        legend.title = element_text(size = 36),
+        legend.text = element_text(size = 30))
+ggsave(file = paste0(outputDir2, "Trajectory_Inference_Without_Adult_Monocle2.png"),
+       plot = p,
+       width = 15, height = 10, dpi = 350)
+
+p <- plot_complex_cell_trajectory(monocle_cds, color_by = "Development", cell_size = 5, cell_link_size = 3, show_branch_points = FALSE) +
+  labs(color="") +
+  theme_classic(base_size = 36) +
+  theme(legend.position = "top",
+        legend.title = element_text(size = 36),
+        legend.text = element_text(size = 30))
+ggsave(file = paste0(outputDir2, "Trajectory_Inference_Without_Adult_Complex_Monocle2.png"),
+       plot = p,
+       width = 15, height = 10, dpi = 350)
 
 ### DE & pathway analyses
 #
@@ -1387,6 +1462,29 @@ multiple_analyses_in_one(Seurat_Object = subset_Seurat_Obj2,
                          garbage_thresh = 1e-04,
                          result_dir = paste0(outputDir2, "PC1_-30/"))
 
+### updated stroma RDS file
+Updated_Seurat_Obj <- readRDS(file = Robj2_path)
+
+### create new column for the analysis
+Updated_Seurat_Obj@meta.data$Dev_Anno <- paste0(Updated_Seurat_Obj@meta.data$Development, "_",
+                                                Updated_Seurat_Obj@meta.data$Annotation)
+
+### determine necessary variables
+time_points <- c("E16", "E18", "P0", "ADULT")
+HSPC_populations <- c("LTHSC", "STHSC", "MPP2", "MPP3", "MPP4")
+
+### set the ident of the object with Tissue type
+Updated_Seurat_Obj <- SetIdent(object = Updated_Seurat_Obj,
+                               cells = rownames(Updated_Seurat_Obj@meta.data),
+                               value = Updated_Seurat_Obj@meta.data$Tissue)
+
+### check whether the orders are the same
+print(identical(names(Idents(object = Updated_Seurat_Obj)), rownames(Updated_Seurat_Obj@meta.data)))
+
+### run UMAP
+Updated_Seurat_Obj <- FindVariableFeatures(Updated_Seurat_Obj)
+Updated_Seurat_Obj <- ScaleData(Updated_Seurat_Obj)
+Updated_Seurat_Obj <- RunUMAP(Updated_Seurat_Obj, dims = 1:5)
 
 
 
