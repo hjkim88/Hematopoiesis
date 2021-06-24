@@ -2999,7 +2999,7 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
                                       target_col = "HSPC",
                                       comp1 = "LTHSC",
                                       comp2 = "Stroma",
-                                      time_point = "Adult",
+                                      time_point = "ADULT",
                                       dim_method = "UMAP",
                                       result_dir=outputDir2)
   
@@ -3008,7 +3008,7 @@ additional_analysis <- function(Robj1_path="./data/Combined_Seurat_Obj.RDATA",
                                       target_col = "HSPC",
                                       comp1 = c("STHSC", "MPP2", "MPP3", "MPP4"),
                                       comp2 = "Stroma",
-                                      time_point = "Adult",
+                                      time_point = "ADULT",
                                       dim_method = "UMAP",
                                       result_dir=outputDir2)
   
