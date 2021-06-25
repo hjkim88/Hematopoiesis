@@ -89,7 +89,12 @@ aggregate_objects <- function(inputDir="Z:/ResearchHome/ProjectSpace/thomagrp/JC
   fwrite(data.frame(Gene=rownames(combined_seurat_object@assays$RNA@counts),
                     combined_seurat_object@assays$RNA@counts,
                     stringsAsFactors = FALSE, check.names = FALSE),
-         file = paste0(outputDir, "scRNASeq_Raw_Count_Matrix.tsv"),
+         file = paste0(outputDir, "scRNASeq_RNA_Raw_Count_Matrix.tsv"),
+         sep = "\t", row.names = FALSE)
+  fwrite(data.frame(ADT=rownames(combined_seurat_object@assays$ADT@counts),
+                    combined_seurat_object@assays$ADT@counts,
+                    stringsAsFactors = FALSE, check.names = FALSE),
+         file = paste0(outputDir, "scRNASeq_ADT_Raw_Count_Matrix.tsv"),
          sep = "\t", row.names = FALSE)
   fwrite(data.frame(Cell_Barcode=rownames(meta.data),
                     meta.data,
