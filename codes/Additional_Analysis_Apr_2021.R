@@ -1487,5 +1487,140 @@ Updated_Seurat_Obj <- ScaleData(Updated_Seurat_Obj)
 Updated_Seurat_Obj <- RunUMAP(Updated_Seurat_Obj, dims = 1:5)
 
 
+#
+### Additional on 08/23/2021
+### Trent wants to find potential markers for flow
+### DEG for each of the T cell clusters in the E16.5 Heme objects vs all other cells
+#
 
+### load libraries
+if(!require(Seurat, quietly = TRUE)) {
+  install.packages("Seurat")
+  require(Seurat, quietly = TRUE)
+}
+if(!require(xlsx, quietly = TRUE)) {
+  install.packages("xlsx")
+  require(xlsx, quietly = TRUE)
+}
+
+### load the object
+load("./data/New_Objects/HemeE16_Final.Robj")
+
+###
+### Each TCell vs other non-Tcell groups
+HemeE16_regress$Group_Anno <- as.character(HemeE16_regress$Final_Annotation)
+HemeE16_regress$Group_Anno[!grepl(pattern = "TCell", HemeE16_regress$Group_Anno, fixed = TRUE)] <- "Others"
+
+### set the ident of the object with the group info
+HemeE16_regress <- SetIdent(object = HemeE16_regress,
+                            cells = rownames(HemeE16_regress@meta.data),
+                            value = HemeE16_regress$Group_Anno)
+
+### set output directory
+output_dir <- "./results/DE_For_Flow/"
+
+### run DE analysis for each T cell cluster
+de_result_list <- vector("list", length = 6)
+for(i in 1:6) {
+  
+  ### get DE genes between two groups
+  de_result <- FindMarkers(object = HemeE16_regress,
+                           test.use = "wilcox",
+                           ident.1 = paste0("TCell", i),
+                           ident.2 = "Others",
+                           logfc.threshold = 0.2,
+                           min.pct = 0.2)
+  
+  ### order the DE reuslt
+  de_result <- de_result[order(de_result$p_val_adj),]
+  
+  ### put the result in the list
+  de_result_list[[i]] <- de_result
+  
+  ### data frame
+  de_result <- data.frame(Gene_Symbol=rownames(de_result),
+                          de_result,
+                          stringsAsFactors = FALSE, check.names = FALSE)
+  
+  ### write out the DE result
+  write.xlsx2(de_result,
+              file = paste0(output_dir,
+                            "TCell", i, "_vs_Others_DE_Result.xlsx"),
+              sheetName = "DE_Result",
+              row.names = FALSE)
+  
+  gc()
+  
+}
+
+### were there any intersections?
+### create a combined table
+result_table <- de_result_list[[1]][which(de_result_list[[1]]$p_val_adj < 0.05),]
+result_table$Count <- 1
+for(i in 2:6) {
+  
+  temp <- de_result_list[[i]][which(de_result_list[[i]]$p_val_adj < 0.05),]
+  temp$Count <- 1
+  
+  commons <- intersect(rownames(result_table), rownames(temp))
+  new_ones <- setdiff(rownames(temp), rownames(result_table))
+  
+  if(length(commons) > 0) {
+    for(j in 1:length(commons)) {
+      for(k in 1:(ncol(result_table)-1)) {
+        result_table[commons[j],k] <- paste(result_table[commons[j],k],
+                                            temp[commons[j],k],
+                                            sep = ";")
+      }
+      result_table[commons[j],"Count"] <- result_table[commons[j],"Count"] + temp[commons[j], "Count"]
+    }
+  }
+  
+  if(length(new_ones) > 0) {
+    result_table <- rbind(result_table,
+                          temp[new_ones,,drop=FALSE])
+  }
+  
+}
+
+### save the result_table
+write.xlsx2(data.frame(Genes=rownames(result_table),
+                       result_table,
+                       stringsAsFactors = FALSE, check.names = FALSE),
+            file = paste0(output_dir,
+                          "Combined_DE_Result_Table.xlsx"),
+            sheetName = "DE_Result_Table",
+            row.names = FALSE)
+
+### How about all the Tcell vs the others?
+HemeE16_regress$Group_Anno2 <- as.character(HemeE16_regress$Group_Anno)
+HemeE16_regress$Group_Anno2[grep(pattern = "TCell", HemeE16_regress$Group_Anno2, fixed = TRUE)] <- "TCells"
+
+### set the ident of the object with the group info
+HemeE16_regress <- SetIdent(object = HemeE16_regress,
+                            cells = rownames(HemeE16_regress@meta.data),
+                            value = HemeE16_regress$Group_Anno2)
+
+### get DE genes between two groups
+de_result <- FindMarkers(object = HemeE16_regress,
+                         test.use = "wilcox",
+                         ident.1 = "TCells",
+                         ident.2 = "Others",
+                         logfc.threshold = 0.2,
+                         min.pct = 0.2)
+
+### order the DE reuslt
+de_result <- de_result[order(de_result$p_val_adj),]
+
+### data frame
+de_result <- data.frame(Gene_Symbol=rownames(de_result),
+                        de_result,
+                        stringsAsFactors = FALSE, check.names = FALSE)
+
+### write out the DE result
+write.xlsx2(de_result,
+            file = paste0(output_dir,
+                          "All_TCell_vs_Others_DE_Result.xlsx"),
+            sheetName = "DE_Result",
+            row.names = FALSE)
 
