@@ -1502,11 +1502,18 @@ if(!require(xlsx, quietly = TRUE)) {
   install.packages("xlsx")
   require(xlsx, quietly = TRUE)
 }
+if(!require(ggplot2, quietly = TRUE)) {
+  install.packages("ggplot2")
+  require(ggplot2, quietly = TRUE)
+}
 
 ### load the object
 load("./data/New_Objects/HemeE16_Final.Robj")
 
-###
+### active assay = "RNA"
+### we are interested in DE genes of scRNA-Seq here, not CITE-Seq
+HemeE16_regress@active.assay <- "RNA"
+
 ### Each TCell vs other non-Tcell groups
 HemeE16_regress$Group_Anno <- as.character(HemeE16_regress$Final_Annotation)
 HemeE16_regress$Group_Anno[!grepl(pattern = "TCell", HemeE16_regress$Group_Anno, fixed = TRUE)] <- "Others"
@@ -1555,11 +1562,11 @@ for(i in 1:6) {
 
 ### were there any intersections?
 ### create a combined table
-result_table <- de_result_list[[1]][which(de_result_list[[1]]$p_val_adj < 0.05),]
+result_table <- de_result_list[[1]][which(de_result_list[[1]]$p_val_adj < 1e-20),]
 result_table$Count <- 1
 for(i in 2:6) {
   
-  temp <- de_result_list[[i]][which(de_result_list[[i]]$p_val_adj < 0.05),]
+  temp <- de_result_list[[i]][which(de_result_list[[i]]$p_val_adj < 1e-20),]
   temp$Count <- 1
   
   commons <- intersect(rownames(result_table), rownames(temp))
@@ -1582,6 +1589,9 @@ for(i in 2:6) {
   }
   
 }
+
+### order it by appearance
+result_table <- result_table[order(-result_table$Count),]
 
 ### save the result_table
 write.xlsx2(data.frame(Genes=rownames(result_table),
@@ -1623,4 +1633,159 @@ write.xlsx2(de_result,
                           "All_TCell_vs_Others_DE_Result.xlsx"),
             sheetName = "DE_Result",
             row.names = FALSE)
+
+### 09/09/2021
+### 1. flow-friendly markers for the mast cell population at E16.5
+### 2. additional markers that might distinguish between the large T cell cluster and the smaller T cell cluster (that is still present at P0)
+
+### see how the clusters look like
+DimPlot(HemeE16_regress, reduction = "umap", group.by = "Final_Annotation", pt.size = 2, label = TRUE)
+
+### Mast cell cluster vs the other cells
+HemeE16_regress$Group_Anno3 <- "Others"
+HemeE16_regress$Group_Anno3[grep(pattern = "^Mast", HemeE16_regress$Final_Annotation, fixed = FALSE)] <- "Mast"
+
+### see how the clusters look like again
+DimPlot(HemeE16_regress, reduction = "umap", group.by = "Group_Anno3", pt.size = 2, label = TRUE)
+
+### set the ident of the object with the group info
+HemeE16_regress <- SetIdent(object = HemeE16_regress,
+                            cells = rownames(HemeE16_regress@meta.data),
+                            value = HemeE16_regress$Group_Anno3)
+
+### get DE genes between two groups
+de_result <- FindMarkers(object = HemeE16_regress,
+                         test.use = "wilcox",
+                         ident.1 = "Mast",
+                         ident.2 = "Others",
+                         logfc.threshold = 0.2,
+                         min.pct = 0.2)
+
+### order the DE reuslt
+de_result <- de_result[order(de_result$p_val_adj),]
+
+### data frame
+de_result <- data.frame(Gene_Symbol=rownames(de_result),
+                        de_result,
+                        stringsAsFactors = FALSE, check.names = FALSE)
+
+### write out the DE result
+write.xlsx2(de_result,
+            file = paste0(output_dir,
+                          "All_Mast_vs_Others_DE_Result.xlsx"),
+            sheetName = "DE_Result",
+            row.names = FALSE)
+
+### DE analysis between large t cell cluster vs small t cell cluster
+### but we have to check the small clusters are the same between E16.5 and P0
+
+### load P0 data
+load("./data/New_Objects/HemeP0_Final.Robj")
+
+### active assay = "RNA"
+### we are interested in DE genes of scRNA-Seq here, not CITE-Seq
+HemeP0_regress@active.assay <- "RNA"
+
+### combine HemeE16 and HemeP0
+HemeE16_regress$Final_Annotation2 <- paste0("Heme16_", HemeE16_regress$Final_Annotation)
+HemeP0_regress$Final_Annotation2 <- paste0("P0_", HemeP0_regress$Final_Annotation)
+Heme_E16_P0_Obj <- merge(x = HemeE16_regress, y = HemeP0_regress, add.cell.ids = c("E16", "P0"))
+
+### normalization
+Heme_E16_P0_Obj <- NormalizeData(Heme_E16_P0_Obj,
+                                 normalization.method = "LogNormalize", scale.factor = 10000)
+
+### find variable genes
+Heme_E16_P0_Obj <- FindVariableFeatures(Heme_E16_P0_Obj,
+                                        selection.method = "vst", nfeatures = 2000)
+
+### scaling
+Heme_E16_P0_Obj <- ScaleData(Heme_E16_P0_Obj,
+                             vars.to.regress = c("nCount_RNA", "percent.mt", "S.Score", "G2M.Score"))
+
+### run pca & umap
+Heme_E16_P0_Obj <- RunPCA(Heme_E16_P0_Obj,
+                          features = VariableFeatures(object = Heme_E16_P0_Obj),
+                          npcs = 15)
+Heme_E16_P0_Obj <- RunUMAP(Heme_E16_P0_Obj, dims = 1:15)
+
+### see whether TCell5 clusters of E16 and P0 are clustered together
+p <- DimPlot(Heme_E16_P0_Obj, reduction = "umap", group.by = "Final_Annotation2", pt.size = 2, label = TRUE) +
+  labs(title = "") +
+  theme_classic(base_size = 30) +
+  theme(legend.position = "none")
+ggsave(file = paste0(output_dir, "UMAP_Heme_E16_P0.pdf"), plot = p,
+       width = 15, height = 10, dpi = 350)
+
+### E16 large t cell cluster vs small t cell cluster
+HemeE16_regress$Group_Anno4 <- "Others"
+HemeE16_regress$Group_Anno4[which(HemeE16_regress$Final_Annotation %in% c("TCell1", "TCell2", "TCell3", "TCell4", "TCell6"))] <- "Large_T"
+HemeE16_regress$Group_Anno4[which(HemeE16_regress$Final_Annotation == "TCell5")] <- "Small_T"
+
+### check the Group_Anno4
+DimPlot(HemeE16_regress, reduction = "umap", group.by = "Group_Anno4", pt.size = 2, label = TRUE)
+
+### set the ident of the object with the group info
+HemeE16_regress <- SetIdent(object = HemeE16_regress,
+                            cells = rownames(HemeE16_regress@meta.data),
+                            value = HemeE16_regress$Group_Anno4)
+
+### get DE genes between two groups
+de_result <- FindMarkers(object = HemeE16_regress,
+                         test.use = "wilcox",
+                         ident.1 = "Large_T",
+                         ident.2 = "Small_T",
+                         logfc.threshold = 0.2,
+                         min.pct = 0.2)
+
+### order the DE reuslt
+de_result <- de_result[order(de_result$p_val_adj),]
+
+### data frame
+de_result <- data.frame(Gene_Symbol=rownames(de_result),
+                        de_result,
+                        stringsAsFactors = FALSE, check.names = FALSE)
+
+### write out the DE result
+write.xlsx2(de_result,
+            file = paste0(output_dir,
+                          "Large_TCell_vs_Small_TCell_DE_Result.xlsx"),
+            sheetName = "DE_Result",
+            row.names = FALSE)
+
+
+### How about all the Tcell vs the others?
+HemeE16_regress$Group_Anno2 <- as.character(HemeE16_regress$Group_Anno)
+HemeE16_regress$Group_Anno2[grep(pattern = "TCell", HemeE16_regress$Group_Anno2, fixed = TRUE)] <- "TCells"
+
+### set the ident of the object with the group info
+HemeE16_regress <- SetIdent(object = HemeE16_regress,
+                            cells = rownames(HemeE16_regress@meta.data),
+                            value = HemeE16_regress$Group_Anno2)
+
+### get DE genes between two groups
+de_result2 <- FindMarkers(object = HemeE16_regress,
+                          test.use = "wilcox",
+                          ident.1 = "TCells",
+                          ident.2 = "Others",
+                          logfc.threshold = 0.2,
+                          min.pct = 0.2)
+
+### order the DE reuslt
+de_result2 <- de_result2[order(de_result2$p_val_adj),]
+
+### data frame
+de_result2 <- data.frame(Gene_Symbol=rownames(de_result2),
+                         de_result2,
+                          stringsAsFactors = FALSE, check.names = FALSE)
+
+### now get the DE genes that are up-regulated in small T cells and up-regulated in the t cells (vs the other cells)
+small_t_degs <- de_result$Gene_Symbol[intersect(which(de_result$p_val_adj < 0.0001),
+                                                which(de_result$avg_log2FC < 0))]
+t_degs <- de_result2$Gene_Symbol[intersect(which(de_result2$p_val_adj < 0.0001),
+                                           which(de_result2$avg_log2FC > 0))]
+
+### print some
+writeLines(paste(intersect(small_t_degs, t_degs)))
+
 
