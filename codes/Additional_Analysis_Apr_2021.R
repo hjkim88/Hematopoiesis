@@ -1789,3 +1789,250 @@ t_degs <- de_result2$Gene_Symbol[intersect(which(de_result2$p_val_adj < 0.0001),
 writeLines(paste(intersect(small_t_degs, t_degs)))
 
 
+#
+### DE & pathway analysis between E16.5 vs E18.5 based on endothelial clusters
+#
+
+### updated stroma RDS file
+Robj2_path="./data/Combined_Seurat_Obj.RDS"
+Updated_Seurat_Obj <- readRDS(file = Robj2_path)
+
+### create new column for the analysis
+Updated_Seurat_Obj@meta.data$Dev_Anno <- paste0(Updated_Seurat_Obj@meta.data$Development, "_",
+                                                Updated_Seurat_Obj@meta.data$Annotation)
+
+### determine necessary variables
+time_points <- c("E16", "E18", "P0", "ADULT")
+HSPC_populations <- c("LTHSC", "STHSC", "MPP2", "MPP3", "MPP4")
+
+### set the ident of the object with Tissue type
+Updated_Seurat_Obj <- SetIdent(object = Updated_Seurat_Obj,
+                               cells = rownames(Updated_Seurat_Obj@meta.data),
+                               value = Updated_Seurat_Obj@meta.data$Tissue)
+
+### check whether the orders are the same
+print(identical(names(Idents(object = Updated_Seurat_Obj)), rownames(Updated_Seurat_Obj@meta.data)))
+
+### run UMAP
+Updated_Seurat_Obj <- FindVariableFeatures(Updated_Seurat_Obj)
+Updated_Seurat_Obj <- ScaleData(Updated_Seurat_Obj)
+Updated_Seurat_Obj <- RunUMAP(Updated_Seurat_Obj, dims = 1:5)
+
+### since we are only interested in ECs, just take ECs
+Updated_Seurat_Obj2 <- subset(Updated_Seurat_Obj,
+                              cells = rownames(Updated_Seurat_Obj@meta.data)[which(Updated_Seurat_Obj$Annotation == "ECs")])
+
+### annotate E16 & E18 ECs
+Updated_Seurat_Obj2$Annotation2 <- paste0(Updated_Seurat_Obj2$Annotation, "_", Updated_Seurat_Obj2$Development)
+Updated_Seurat_Obj2 <- SetIdent(object = Updated_Seurat_Obj2,
+                                cells = rownames(Updated_Seurat_Obj2@meta.data),
+                                value = Updated_Seurat_Obj2$Annotation2)
+
+### perform DE analysis between E16 ECs vs E18 ECs
+de_result <- FindMarkers(object = Updated_Seurat_Obj2,
+                         test.use = "wilcox",
+                         ident.1 = "ECs_E16",
+                         ident.2 = "ECs_E18",
+                         logfc.threshold = 0.2,
+                         min.pct = 0.2)
+
+### order the DE reuslt
+de_result <- de_result[order(de_result$p_val_adj),]
+
+### data frame
+de_result <- data.frame(Gene_Symbol=rownames(de_result),
+                        de_result,
+                        stringsAsFactors = FALSE, check.names = FALSE)
+
+### write out the DE result
+write.xlsx2(de_result,
+            file = paste0("./results/",
+                          "ECs_E16_vs_E18.xlsx"),
+            sheetName = "DE_Result",
+            row.names = FALSE)
+
+# ******************************************************************************************
+# Pathway Analysis with clusterProfiler package
+# Input: geneList     = a vector of gene Entrez IDs for pathway analysis [numeric or character]
+#        org          = organism that will be used in the analysis ["human" or "mouse"]
+#                       should be either "human" or "mouse"
+#        database     = pathway analysis database (KEGG or GO) ["KEGG" or "GO"]
+#        title        = title of the pathway figure [character]
+#        pv_threshold = pathway analysis p-value threshold (not DE analysis threshold) [numeric]
+#        displayNum   = the number of pathways that will be displayed [numeric]
+#                       (If there are many significant pathways show the few top pathways)
+#        imgPrint     = print a plot of pathway analysis [TRUE/FALSE]
+#        dir          = file directory path of the output pathway figure [character]
+#
+# Output: Pathway analysis results in figure - using KEGG and GO pathways
+#         The x-axis represents the number of DE genes in the pathway
+#         The y-axis represents pathway names
+#         The color of a bar indicates adjusted p-value from the pathway analysis
+#         For Pathview Result, all colored genes are found DE genes in the pathway,
+#         and the color indicates log2(fold change) of the DE gene from DE analysis
+# ******************************************************************************************
+pathwayAnalysis_CP <- function(geneList,
+                               org,
+                               database,
+                               title="Pathway_Results",
+                               pv_threshold=0.05,
+                               displayNum=Inf,
+                               imgPrint=TRUE,
+                               dir="./") {
+  
+  ### load library
+  if(!require(clusterProfiler, quietly = TRUE)) {
+    if (!requireNamespace("BiocManager", quietly = TRUE))
+      install.packages("BiocManager")
+    BiocManager::install("clusterProfiler")
+    require(clusterProfiler, quietly = TRUE)
+  }
+  if(!require(ggplot2)) {
+    install.packages("ggplot2")
+    library(ggplot2)
+  }
+  
+  
+  ### collect gene list (Entrez IDs)
+  geneList <- geneList[which(!is.na(geneList))]
+  
+  if(!is.null(geneList)) {
+    ### make an empty list
+    p <- list()
+    
+    if(database == "KEGG") {
+      ### KEGG Pathway
+      kegg_enrich <- enrichKEGG(gene = geneList, organism = org, pvalueCutoff = pv_threshold)
+      
+      if(is.null(kegg_enrich)) {
+        writeLines("KEGG Result does not exist")
+        return(NULL)
+      } else {
+        kegg_enrich@result <- kegg_enrich@result[which(kegg_enrich@result$p.adjust < pv_threshold),]
+        
+        if(imgPrint == TRUE) {
+          if((displayNum == Inf) || (nrow(kegg_enrich@result) <= displayNum)) {
+            result <- kegg_enrich@result
+            description <- kegg_enrich@result$Description
+          } else {
+            result <- kegg_enrich@result[1:displayNum,]
+            description <- kegg_enrich@result$Description[1:displayNum]
+          }
+          
+          if(nrow(kegg_enrich) > 0) {
+            p[[1]] <- ggplot(result, aes(x=Description, y=Count)) + labs(x="", y="Gene Counts") + 
+              theme_classic(base_size = 30) + geom_bar(aes(fill = p.adjust), stat="identity") + coord_flip() +
+              scale_x_discrete(limits = rev(description)) +
+              guides(fill = guide_colorbar(ticks=FALSE, title="P.Val", barheight=10)) +
+              ggtitle(paste0("KEGG ", title)) +
+              theme(axis.text = element_text(size = 30))
+            
+            ggsave(file = paste0(dir, "KEGG_", title, "_CB.png"), plot = p[[1]], width = 35, height = 10, dpi = 350)
+          } else {
+            writeLines("KEGG Result does not exist")
+          }
+        }
+        
+        return(kegg_enrich@result)
+      }
+    } else if(database == "GO") {
+      ### GO Pathway
+      if(org == "human") {
+        go_enrich <- enrichGO(gene = geneList, OrgDb = 'org.Hs.eg.db', readable = T, ont = "BP", pvalueCutoff = pv_threshold)
+      } else if(org == "mouse") {
+        go_enrich <- enrichGO(gene = geneList, OrgDb = 'org.Mm.eg.db', readable = T, ont = "BP", pvalueCutoff = pv_threshold)
+      } else {
+        go_enrich <- NULL
+        writeLines(paste("Unknown org variable:", org))
+      }
+      
+      if(is.null(go_enrich)) {
+        writeLines("GO Result does not exist")
+        return(NULL)
+      } else {
+        go_enrich@result <- go_enrich@result[which(go_enrich@result$p.adjust < pv_threshold),]
+        
+        if(imgPrint == TRUE) {
+          if((displayNum == Inf) || (nrow(go_enrich@result) <= displayNum)) {
+            result <- go_enrich@result
+            description <- go_enrich@result$Description
+          } else {
+            result <- go_enrich@result[1:displayNum,]
+            description <- go_enrich@result$Description[1:displayNum]
+          }
+          
+          if(nrow(go_enrich) > 0) {
+            p[[2]] <- ggplot(result, aes(x=Description, y=Count)) + labs(x="", y="Gene Counts") + 
+              theme_classic(base_size = 30) + geom_bar(aes(fill = p.adjust), stat="identity") + coord_flip() +
+              scale_x_discrete(limits = rev(description)) +
+              guides(fill = guide_colorbar(ticks=FALSE, title="P.Val", barheight=10)) +
+              ggtitle(paste0("GO ", title)) +
+              theme(axis.text = element_text(size = 30))
+            
+            ggsave(file = paste0(dir, "GO_", title, "_CB.png"), plot = p[[2]], width = 35, height = 10, dpi = 350)
+          } else {
+            writeLines("GO Result does not exist")
+          }
+        }
+        
+        return(go_enrich@result)
+      }
+    } else {
+      stop("database prameter should be \"GO\" or \"KEGG\"")
+    }
+  } else {
+    writeLines("geneList = NULL")
+  }
+}
+
+### pathway analysis with up-regulated genes & FDR < 0.05
+de_entrez_ids <- mapIds(org.Mm.eg.db,
+                        rownames(de_result)[intersect(which(de_result$p_val_adj < 0.05),
+                                                      which(de_result$avg_log2FC > 0))],
+                        "ENTREZID", "SYMBOL")
+de_entrez_ids <- de_entrez_ids[!is.na(de_entrez_ids)]
+
+### GO & KEGG
+pathway_result_GO <- pathwayAnalysis_CP(geneList = de_entrez_ids,
+                                        org = "mouse", database = "GO",
+                                        title = paste0("ECs_E16_vs_E18_Upregulated_Pathways"),
+                                        displayNum = 10, imgPrint = TRUE,
+                                        dir = "./results/")
+pathway_result_KEGG <- pathwayAnalysis_CP(geneList = de_entrez_ids,
+                                          org = "mouse", database = "KEGG",
+                                          title = paste0("ECs_E16_vs_E18_Upregulated_Pathways"),
+                                          displayNum = 10, imgPrint = TRUE,
+                                          dir = "./results/")
+write.xlsx2(pathway_result_GO, file = paste0("./results/GO_ECs_E16_vs_E18_Upregulated_Pathways.xlsx"),
+            row.names = FALSE, sheetName = paste0("GO_Results"))
+write.xlsx2(pathway_result_KEGG, file = paste0("./results/KEGG_ECs_E16_vs_E18_Upregulated_Pathways.xlsx"),
+            row.names = FALSE, sheetName = paste0("KEGG_Results"))
+
+### pathway analysis with down-regulated genes & FDR < 0.05
+de_entrez_ids <- mapIds(org.Mm.eg.db,
+                        rownames(de_result)[intersect(which(de_result$p_val_adj < 0.05),
+                                                      which(de_result$avg_log2FC < 0))],
+                        "ENTREZID", "SYMBOL")
+de_entrez_ids <- de_entrez_ids[!is.na(de_entrez_ids)]
+
+### GO & KEGG
+pathway_result_GO <- pathwayAnalysis_CP(geneList = de_entrez_ids,
+                                        org = "mouse", database = "GO",
+                                        title = paste0("ECs_E16_vs_E18_Downregulated_Pathways"),
+                                        displayNum = 10, imgPrint = TRUE,
+                                        dir = "./results/")
+pathway_result_KEGG <- pathwayAnalysis_CP(geneList = de_entrez_ids,
+                                          org = "mouse", database = "KEGG",
+                                          title = paste0("ECs_E16_vs_E18_Downregulated_Pathways"),
+                                          displayNum = 10, imgPrint = TRUE,
+                                          dir = "./results/")
+write.xlsx2(pathway_result_GO, file = paste0("./results/GO_ECs_E16_vs_E18_Downregulated_Pathways.xlsx"),
+            row.names = FALSE, sheetName = paste0("GO_Results"))
+write.xlsx2(pathway_result_KEGG, file = paste0("./results/KEGG_ECs_E16_vs_E18_Downregulated_Pathways.xlsx"),
+            row.names = FALSE, sheetName = paste0("KEGG_Results"))
+
+
+
+
+
+
