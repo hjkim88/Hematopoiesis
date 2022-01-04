@@ -42,6 +42,30 @@ sub_cluster_checking <- function(CellRangerPath1="Z:/ResearchHome/SharedResource
     require(ggrepel, quietly = TRUE)
   }
   
+  ### Basic function to convert mouse to human gene names
+  convertMouseGeneList <- function(x){
+    require("biomaRt")
+    human = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+    mouse = useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+    genesV2 = getLDS(attributes = c("mgi_symbol"), filters = "mgi_symbol", values = x , mart = mouse, attributesL = c("hgnc_symbol"), martL = human, uniqueRows=T)
+    humanx <- unique(genesV2[, 2])
+    # Print the first 6 genes found to the screen
+    print(head(humanx))
+    return(humanx)
+  }
+  
+  ### Basic function to convert human to mouse gene names
+  convertHumanGeneList <- function(x){
+    require("biomaRt")
+    human = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+    mouse = useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+    genesV2 = getLDS(attributes = c("hgnc_symbol"), filters = "hgnc_symbol", values = x , mart = human, attributesL = c("mgi_symbol"), martL = mouse, uniqueRows=T)
+    humanx <- unique(genesV2[, 2])
+    # Print the first 6 genes found to the screen
+    print(head(humanx))
+    return(humanx)
+  }
+  
   ### load the TDH027 dataset
   TDH027.data <- Read10X(data.dir = CellRangerPath1)
   
@@ -71,13 +95,14 @@ sub_cluster_checking <- function(CellRangerPath1="Z:/ResearchHome/SharedResource
   ### Filter cells that have > 10% mitochondrial counts
   TDH027_Seurat_Obj <- subset(TDH027_Seurat_Obj, subset = nFeature_RNA > 300 & nFeature_RNA < 6500 & percent.mt < 10)
   
-  ### Cell cycle score (will be used later for regression out)
-  TDH027_Seurat_Obj <- CellCycleScoring(object = TDH027_Seurat_Obj,
-                                        g2m.features = cc.genes$g2m.genes,
-                                        s.features = cc.genes$s.genes)
   ### normalization
   TDH027_Seurat_Obj <- NormalizeData(TDH027_Seurat_Obj,
                                      normalization.method = "LogNormalize", scale.factor = 10000)
+  
+  ### Cell cycle score (will be used later for regression out)
+  TDH027_Seurat_Obj <- CellCycleScoring(object = TDH027_Seurat_Obj,
+                                        g2m.features = convertHumanGeneList(cc.genes$g2m.genes),
+                                        s.features = convertHumanGeneList(cc.genes$s.genes))
   
   ### find variable genes
   TDH027_Seurat_Obj <- FindVariableFeatures(TDH027_Seurat_Obj,
