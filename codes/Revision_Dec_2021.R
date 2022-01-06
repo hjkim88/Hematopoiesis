@@ -28,6 +28,8 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
     install.packages("ggplot2")
     require(ggplot2, quietly = TRUE)
   }
+  remotes::install_github('chris-mcginnis-ucsf/DoubletFinder')
+  require(DoubletFinder, quietly = TRUE)
   
   ## updated stroma RDS file
   Updated_Seurat_Obj <- readRDS(file = inputDataPath)
@@ -76,6 +78,12 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   ### normalization
   Updated_Seurat_Obj <- NormalizeData(Updated_Seurat_Obj,
                                       normalization.method = "LogNormalize", scale.factor = 10000)
+  
+  ### Cell cycle score (will be used later for regression out)
+  Updated_Seurat_Obj <- CellCycleScoring(object = Updated_Seurat_Obj,
+                                         g2m.features = cc.genes$g2m.genes,
+                                         s.features = cc.genes$s.genes)
+  
   ### find variable genes
   Updated_Seurat_Obj <- FindVariableFeatures(Updated_Seurat_Obj,
                                              selection.method = "vst", nfeatures = 2000)
@@ -148,9 +156,97 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   }
   
   
+  ### Basic function to convert mouse to human gene names
+  convertMouseGeneList <- function(x){
+    require("biomaRt")
+    human = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+    mouse = useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+    genesV2 = getLDS(attributes = c("mgi_symbol"), filters = "mgi_symbol", values = x , mart = mouse, attributesL = c("hgnc_symbol"), martL = human, uniqueRows=T)
+    humanx <- unique(genesV2[, 2])
+    # Print the first 6 genes found to the screen
+    print(head(humanx))
+    return(humanx)
+  }
+  
+  ### Basic function to convert human to mouse gene names
+  convertHumanGeneList <- function(x){
+    require("biomaRt")
+    human = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+    mouse = useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+    genesV2 = getLDS(attributes = c("hgnc_symbol"), filters = "hgnc_symbol", values = x , mart = human, attributesL = c("mgi_symbol"), martL = mouse, uniqueRows=T)
+    humanx <- unique(genesV2[, 2])
+    # Print the first 6 genes found to the screen
+    print(head(humanx))
+    return(humanx)
+  }
+  
   ### 4. doublets; UMI distributions
+  ### https://github.com/chris-mcginnis-ucsf/DoubletFinder
+  
+  ### divide the data into different time points
+  ### because I believe they were from different lanes
+  E16_Seurat_Obj <- subset(Updated_Seurat_Obj,
+                           cells = rownames(Updated_Seurat_Obj@meta.data)[which(Updated_Seurat_Obj$Development == "E16")])
+  E18_Seurat_Obj <- subset(Updated_Seurat_Obj,
+                           cells = rownames(Updated_Seurat_Obj@meta.data)[which(Updated_Seurat_Obj$Development == "E18")])
+  P0_Seurat_Obj <- subset(Updated_Seurat_Obj,
+                          cells = rownames(Updated_Seurat_Obj@meta.data)[which(Updated_Seurat_Obj$Development == "P0")])
+  ADULT_Seurat_Obj <- subset(Updated_Seurat_Obj,
+                             cells = rownames(Updated_Seurat_Obj@meta.data)[which(Updated_Seurat_Obj$Development == "ADULT")])
+  
+  ### preprocessing each seurat object
+  seurat_preprocess <- function(so) {
+    ### normalization
+    so2 <- NormalizeData(so,
+                         normalization.method = "LogNormalize", scale.factor = 10000)
+    
+    ### Cell cycle score (will be used later for regression out)
+    so2 <- CellCycleScoring(object = so2,
+                            g2m.features = convertHumanGeneList(cc.genes$g2m.genes),
+                            s.features = convertHumanGeneList(cc.genes$s.genes))
+    
+    ### find variable genes
+    so2 <- FindVariableFeatures(so2,
+                                selection.method = "vst", nfeatures = 2000)
+    ### scaling
+    so2 <- ScaleData(so2,
+                     vars.to.regress = c("nCount_RNA", "percent.mt", "S.Score", "G2M.Score"))
+    ### PCA
+    so2 <- RunPCA(so2,
+                  features = VariableFeatures(object = so2),
+                  npcs = 20)
+    ### UMAP
+    so2 <- RunUMAP(so2, dims = 1:20)
+    
+    return(so2)
+  }
+  
+  E16_Seurat_Obj <- seurat_preprocess(E16_Seurat_Obj)
+  E18_Seurat_Obj <- seurat_preprocess(E18_Seurat_Obj)
+  P0_Seurat_Obj <- seurat_preprocess(P0_Seurat_Obj)
+  ADULT_Seurat_Obj <- seurat_preprocess(ADULT_Seurat_Obj)
+  
+  ### function for doublet detection
+    
+  ### pK Identification (no ground-truth)
+  sweep.res.list <- paramSweep_v3(so, PCs = 1:20, sct = FALSE)
+  sweep.stats <- summarizeSweep(sweep.res.list, GT = FALSE)
+  bcmvn <- find.pK(sweep.stats)
+  
+  ### pk -> 0.01
+  pk <- 0.01
+  
+  ### Homotypic Doublet Proportion Estimate
+  ### Assuming 7.5% doublet formation rate
+  nExp_poi <- round(0.075*nrow(so@meta.data))
+  
+  ### doublet detection with the parameters
+  so <- doubletFinder_v3(so, PCs = 1:20, pK = pk, nExp = nExp_poi)
   
   
+    
+    
+    
   
   
   
