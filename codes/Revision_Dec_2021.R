@@ -28,8 +28,13 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
     install.packages("ggplot2")
     require(ggplot2, quietly = TRUE)
   }
+  if(!require(ggthemes, quietly = TRUE)) {
+    install.packages("ggthemes")
+    require(ggthemes, quietly = TRUE)
+  }
   remotes::install_github('chris-mcginnis-ucsf/DoubletFinder')
   require(DoubletFinder, quietly = TRUE)
+  
   
   ## updated stroma RDS file
   Updated_Seurat_Obj <- readRDS(file = inputDataPath)
@@ -244,9 +249,61 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   so <- doubletFinder_v3(so, PCs = 1:20, pK = pk, nExp = nExp_poi)
   
   
+  
+  
+  ### Reviewer #2 - 2.
+  ### The annotation of clusters. The authors should provide clear information to readers how the clusters were assigned to the cell types.
+  ### I didn’t see a single dotplot, violin plot, ridge plot, or heatmap that shows the level of expression of marker genes across all clusters.
+  ### Instead authors use UMAPs which are not good for quantitative assessment of gene expression. In figure 4b it seems that authors drew by hand
+  ### boundaries around various clusters which they divided by numbers. The relevance of these numbers remains unclear. For example,
+  ### what is the difference between Mast1, Mast2i and Mast2ii, etc.? In supp. fig. 4b there is a number of UMAPs with expression of marker genes
+  ### for each of the cell types. The expression bar is labelled low—high which has very little meaning in terms of quantification of expression.
+  ### Furthermore, most of the marker genes are lowly expressed and often dispersed on the UMAP rather than confided to a distinct cluster
+  ### e.g. s100a8, siglech etc.
+  
+  ### -> Trent, I am going to make a dotplot to show gene expression changes among clusters. But could you provide few marker genes
+  ### that you want to show that they are important for distinguishing some clusters? I would appreciate if you could also give me
+  ### the order of the genes – the order you want to present in the plot.
+  
+  ### only use Heme data
+  sub_seurat_obj <- subset(Updated_Seurat_Obj,
+                           cells = rownames(Updated_Seurat_Obj@meta.data)[which(Updated_Seurat_Obj$Cell_Type == "Heme")])
+  
+  ### set genes & cell types of interest
+  interesting_genes <- c("Bmi1", "Cd33", "Cd34", "Cd38", "Cd44", "Cd48", "Thy1", "Ly6a",
+                         "Ly6e", "Myb", "Mcl1", "Pten", "Stat5a", "Stat5b")
+  
+  interesting_cell_types <- c("Mast1", "Mast2", "Mast3", "Mono1", "Prog", "Mono1", "Mono2", "Mono3", "TCell", "Bcell")
+  
+  ### only use interesting data
+  sub_seurat_obj2 <- subset(sub_seurat_obj,
+                            cells = rownames(sub_seurat_obj@meta.data)[which(sub_seurat_obj$Annotation %in% interesting_cell_types)])
+  
+  ### dot plot
+  p <- DotPlot(sub_seurat_obj2,
+               features = interesting_genes,
+               cols = c("coral", "darkolivegreen"),
+               group.by = "Annotation") +
+    scale_size(range = c(2, 15)) +
+    coord_flip() +
+    xlab("") +
+    ylab("") +
+    theme_calc(base_size = 35) +
+    theme(plot.title = element_text(hjust = 0.5))
+  ggsave(file = paste0(outputDir, "R2C2_Dotplot_Markers.png"),
+         plot = p, width = 20, height = 10, dpi = 350)
+  
+  ### ridge plot
+  
+  
+  
+  
+  ### Reviewer #3 – 0.
+  ### Could the early (E15.5-E18.5) FBM HSPCs are mainly CXCR4-? If yes, could the CXCR4- FBM HSPCs contribute to the increased
+  ### lymphoid output (increased B-lymphoid output in transplantation assay E15.5-E18.5 (Fig 1c), increased T-lymphoid output in figure 6)?
+  ### Could early BM niches are supportive for lymphoid biased HSCPs only, but not full-potential HSPCs?
     
-    
-    
+  ### -> I can check if E16 & E18 are CXCR4- when compared to P0 & adult. We can discuss the further things after seeing the results.
   
   
   
