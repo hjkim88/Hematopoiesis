@@ -32,6 +32,10 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
     install.packages("ggthemes")
     require(ggthemes, quietly = TRUE)
   }
+  if(!require(ggpubr, quietly = TRUE)) {
+    install.packages("ggpubr")
+    require(ggpubr, quietly = TRUE)
+  }
   remotes::install_github('chris-mcginnis-ucsf/DoubletFinder')
   require(DoubletFinder, quietly = TRUE)
   
@@ -294,8 +298,47 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
          plot = p, width = 20, height = 10, dpi = 350)
   
   ### ridge plot
+  p <- RidgePlot(sub_seurat_obj2,
+                 features = interesting_genes,
+                 group.by = "Annotation",
+                 ncol = 5)
+  for(i in 1:length(interesting_genes)) {
+    p[[i]] <- p[[i]] +
+      ylab("") +
+      theme_classic(base_size = 10) +
+      theme(legend.key.size = unit(3, 'cm'),
+            legend.position = "none",
+            legend.title = element_text(angle = 0, size = 30, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"),
+            legend.text = element_text(angle = 0, size = 25, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"),
+            plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 35, color = "black", face = "bold"),
+            plot.subtitle = element_text(hjust = 0.5, vjust = 0.5, size = 25, color = "black", face = "bold"),
+            axis.title = element_text(angle = 0, size = 30, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"),
+            axis.text = element_text(angle = 0, size = 25, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"))
+  }
+  
+  ggsave(file = paste0(outputDir, "R2C2_Ridgeplot_Markers.png"),
+         plot = p, width = 25, height = 15, dpi = 350)
   
   
+  ### violin plot
+  sub_seurat_obj2 <- SetIdent(object = sub_seurat_obj2,
+                              cells = rownames(sub_seurat_obj2@meta.data),
+                              value = sub_seurat_obj2$Annotation)
+  p <- VlnPlot(sub_seurat_obj2, features = interesting_genes, slot = "data",
+               pt.size = 0, ncol = 4)
+  for(i in 1:length(interesting_genes)) {
+    p[[i]] <- p[[i]] + geom_boxplot(width=0.1) +
+      stat_compare_means(size = 5) +
+      ylab("Log-Normalized EXP") +
+      stat_summary(fun=mean, geom="point", size=3, color="#852A30") +
+      theme_classic(base_size = 15) +
+      theme(legend.position = "none",
+            axis.title.x = element_blank())
+  }
+  
+  ### save the violin plot
+  ggsave(file = paste0(outputDir, "R2C2_Violin_Markers.png"),
+         plot = p, width = 30, height = 20, dpi = 350)
   
   
   ### Reviewer #3 – 0.
@@ -305,8 +348,54 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
     
   ### -> I can check if E16 & E18 are CXCR4- when compared to P0 & adult. We can discuss the further things after seeing the results.
   
+  ### dot plot
+  p <- DotPlot(sub_seurat_obj,
+               features = "Cxcr4",
+               cols = c("coral", "darkolivegreen"),
+               group.by = "Development") +
+    scale_size(range = c(10, 30)) +
+    coord_flip() +
+    xlab("") +
+    ylab("") +
+    theme_classic(base_size = 35) +
+    theme(plot.title = element_text(hjust = 0.5))
+  ggsave(file = paste0(outputDir, "R3C0_Dotplot_Cxcr4.png"),
+         plot = p, width = 18, height = 12, dpi = 350)
+  
+  ### violin plot
+  sub_seurat_obj <- SetIdent(object = sub_seurat_obj,
+                             cells = rownames(sub_seurat_obj@meta.data),
+                             value = sub_seurat_obj$Development)
+  p <- VlnPlot(sub_seurat_obj, features = "Cxcr4", slot = "data",
+               pt.size = 0, ncol = 1)
+
+  p <- p + geom_boxplot(width=0.1) +
+    stat_compare_means(size = 5) +
+    ylab("Log-Normalized EXP") +
+    stat_summary(fun=mean, geom="point", size=3, color="#852A30") +
+    theme_classic(base_size = 35) +
+    theme(legend.position = "none",
+          axis.title.x = element_blank())
+  
+  ### save the violin plot
+  ggsave(file = paste0(outputDir, "R3C0_Violin_Cxcr4.png"),
+         plot = p, width = 15, height = 10, dpi = 350)
   
   
+  ### Reviewer #3 – 5.
+  ### In figure 5 a-c, the author annotated 3 different E16.5 FBM LT-HSCs showing different biological process with GO term analysis.
+  ### The author should go further to analysis the expression profile of HSCs signature genes, cell cycle related genes and chemotaxis
+  ### related genes, e.g., SLAMF1, PROCR, HOXA9, CD48, CXCR4, CXCR3, ACKR7 receptors. Is it possible that not all of the 3 different clusters
+  ### are full functional, unbiased LT-HSCs?
+  
+  ### -> We might want to show a dot plot of the genes that the reviewer mentioned to compare the expression profiles among the 3 clusters.
+  ### Then we can additionally describe what are the differences of the 3 clusters.
+  
+  ### it's actually about LTHSCs - 3 clusters of E16.5
+  LTHSC_E16_Seurat_Obj <- subset(E16_Seurat_Obj,
+                                 cells = rownames(E16_Seurat_Obj@meta.data)[which(E16_Seurat_Obj$HSPC == "LTHSC")])
+  
+  ### draw UMAP to find the 3 clusters
   
   
   
