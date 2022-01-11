@@ -36,6 +36,10 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
     install.packages("ggpubr")
     require(ggpubr, quietly = TRUE)
   }
+  if(!require(gridExtra, quietly = TRUE)) {
+    install.packages("gridExtra")
+    require(gridExtra, quietly = TRUE)
+  }
   remotes::install_github('chris-mcginnis-ucsf/DoubletFinder')
   require(DoubletFinder, quietly = TRUE)
   
@@ -53,23 +57,6 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   
   ### make the output directory
   dir.create(outputDir, showWarnings = FALSE, recursive = TRUE)
-  
-  ### Reviewer #2 - 2.
-  ### The annotation of clusters. The authors should provide clear information to readers how the clusters were assigned to the cell types.
-  ### I didn’t see a single dotplot, violin plot, ridge plot, or heatmap that shows the level of expression of marker genes across all clusters.
-  ### Instead authors use UMAPs which are not good for quantitative assessment of gene expression.
-  ### In figure 4b it seems that authors drew by hand boundaries around various clusters which they divided by numbers.
-  ### The relevance of these numbers remains unclear. For example, what is the difference between Mast1, Mast2i and Mast2ii, etc.?
-  ### In supp. fig. 4b there is a number of UMAPs with expression of marker genes for each of the cell types.
-  ### The expression bar is labelled low—high which has very little meaning in terms of quantification of expression.
-  ### Furthermore, most of the marker genes are lowly expressed and often dispersed on the UMAP rather than confided to a distinct cluster
-  ### e.g. s100a8, siglech etc.
-  
-  ### -> If you included the DE gene list of all the clusters, it must say those genes are differentially expressed in each of the cluster
-  ### and the authors can look them up. But since the reviewer pointed this out, we can provide a dot plot of some marker genes
-  ### for some important clusters.
-  
-  
   
   
   ### Reviewer #2 - 7.
@@ -109,7 +96,7 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   ### 1. Elbow plot
   n <- 20
   
-  ### PCA
+  ### Elbow plot
   p <- ElbowPlot(Updated_Seurat_Obj, ndims = n, reduction = "pca") +
     ggtitle("Elbow Plot - PCA") +
     theme_classic(base_size = 30) +
@@ -123,6 +110,25 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
     scale_x_continuous(labels = 1:n, breaks = 1:n)
   p$layers[[1]]$geom$default_aes$size <- 5
   ggsave(paste0(outputDir, "R2C7_Elbow_plot_PCA.png"), plot = p, width = 25, height = 10, dpi = 350)
+  
+  ### only use Heme data
+  sub_seurat_obj <- subset(Updated_Seurat_Obj,
+                           cells = rownames(Updated_Seurat_Obj@meta.data)[which(Updated_Seurat_Obj$Cell_Type == "Heme")])
+  
+  ### Elbow plot
+  p <- ElbowPlot(sub_seurat_obj, ndims = n, reduction = "pca") +
+    ggtitle("Elbow Plot - PCA") +
+    theme_classic(base_size = 30) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 30, color = "black", face = "bold"),
+          axis.text = element_text(size = 25, color = "black", face = "bold"),
+          axis.title = element_text(size = 30, color = "black", face = "bold"),
+          legend.title = element_text(size = 30, color = "black", face = "bold"),
+          legend.text = element_text(size = 25, color = "black", face = "bold"),
+          legend.key.size = unit(1, 'cm'),
+          legend.position = "right") +
+    scale_x_continuous(labels = 1:n, breaks = 1:n)
+  p$layers[[1]]$geom$default_aes$size <- 5
+  ggsave(paste0(outputDir, "R2C7_Elbow_plot_PCA2.png"), plot = p, width = 25, height = 10, dpi = 350)
   
   
   ### 3. batch effect
@@ -253,6 +259,36 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   so <- doubletFinder_v3(so, PCs = 1:20, pK = pk, nExp = nExp_poi)
   
   
+  
+  
+  ### Reviewer #1 - 4.
+  ### Beaudin et al. defined a Flt3+ HSC population that is transient. Is this population evident in the authors dataset?
+  
+  ### -> I think I need to talk with Trent to know the meaning of "transient" of the Flt3+ HSC population,
+  ### but this is definitely something that we can do with our dataset.
+  
+  ### UMAP of Flt3+ population
+  p <- FeaturePlot(Updated_Seurat_Obj, features = "Flt3",
+                   cols = c("darkolivegreen", "coral"),
+                   raster = TRUE,
+                   pt.size = 1,
+                   label = TRUE,
+                   label.size = 4,
+                   ncol = 1)
+  
+  p2 <- DimPlot(object = Updated_Seurat_Obj, reduction = "umap", raster = TRUE,
+                group.by = "Development",
+                pt.size = 1)
+  
+  p3 <- DimPlot(object = Updated_Seurat_Obj, reduction = "umap", raster = TRUE,
+                group.by = "HSPC",
+                pt.size = 1)
+  
+  g <- arrangeGrob(grobs = list(p, p2, p3),
+                   nrow = 2,
+                   ncol = 2,
+                   top = "")
+  ggsave(paste0(outputDir, "R1C4_UMAP_Flt3.png"), plot = g, width = 12, height = 10, dpi = 350)
   
   
   ### Reviewer #2 - 2.
