@@ -40,6 +40,10 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
     install.packages("gridExtra")
     require(gridExtra, quietly = TRUE)
   }
+  if(!require(data.table, quietly = TRUE)) {
+    install.packages("data.table")
+    require(data.table, quietly = TRUE)
+  }
   remotes::install_github('chris-mcginnis-ucsf/DoubletFinder')
   require(DoubletFinder, quietly = TRUE)
   
@@ -83,13 +87,16 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   ### find variable genes
   Updated_Seurat_Obj <- FindVariableFeatures(Updated_Seurat_Obj,
                                              selection.method = "vst", nfeatures = 2000)
+  
   ### scaling
   Updated_Seurat_Obj <- ScaleData(Updated_Seurat_Obj,
                                   vars.to.regress = c("nCount_RNA", "percent.mt", "S.Score", "G2M.Score"))
+  
   ### PCA
   Updated_Seurat_Obj <- RunPCA(Updated_Seurat_Obj,
                                features = VariableFeatures(object = Updated_Seurat_Obj),
                                npcs = 50)
+  
   ### UMAP
   Updated_Seurat_Obj <- RunUMAP(Updated_Seurat_Obj, dims = 1:50)
   
@@ -242,7 +249,7 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   ADULT_Seurat_Obj <- seurat_preprocess(ADULT_Seurat_Obj)
   
   ### function for doublet detection
-    
+  
   ### pK Identification (no ground-truth)
   sweep.res.list <- paramSweep_v3(so, PCs = 1:20, sct = FALSE)
   sweep.stats <- summarizeSweep(sweep.res.list, GT = FALSE)
@@ -381,7 +388,7 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   ### Could the early (E15.5-E18.5) FBM HSPCs are mainly CXCR4-? If yes, could the CXCR4- FBM HSPCs contribute to the increased
   ### lymphoid output (increased B-lymphoid output in transplantation assay E15.5-E18.5 (Fig 1c), increased T-lymphoid output in figure 6)?
   ### Could early BM niches are supportive for lymphoid biased HSCPs only, but not full-potential HSPCs?
-    
+  
   ### -> I can check if E16 & E18 are CXCR4- when compared to P0 & adult. We can discuss the further things after seeing the results.
   
   ### dot plot
@@ -404,7 +411,7 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
                              value = sub_seurat_obj$Development)
   p <- VlnPlot(sub_seurat_obj, features = "Cxcr4", slot = "data",
                pt.size = 0, ncol = 1)
-
+  
   p <- p + geom_boxplot(width=0.1) +
     stat_compare_means(size = 5) +
     ylab("Log-Normalized EXP") +
@@ -432,6 +439,89 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
                                  cells = rownames(E16_Seurat_Obj@meta.data)[which(E16_Seurat_Obj$HSPC == "LTHSC")])
   
   ### draw UMAP to find the 3 clusters
+  
+  
+  
+  
+  
+  
+  ### Reviewer #1 - 3.
+  ### The authors should also incorporate some comparative analyses with the human fetal bone marrow recently published
+  ### by Jardine et al. It would be helpful for the field to have some high level discussion of similarities and differences.
+  
+  ### -> 1.) Pull out what they have annotated as stroma and HSC/MPP and run them through our RNA-Magnet pipeline
+  ### (with ligand coming from Stroma and receptor coming from HSC/MPP).
+  ### 2.) Pull out what they have annotated as HSC/MPP, recluster, and then perform GO analysis on the clusters
+  ### to see if there is any overlap in the GO terms between their HSC/MPPs and our HSCs.
+  
+  ### load the Jardine data
+  jardine_meta <- read.table(file = "./data/E-MTAB-9389.sdrf.txt",
+                             sep = "\t", header = TRUE,
+                             stringsAsFactors = FALSE, check.names = FALSE)
+  jardine_data <- fread(file = "./data/fbm_tot_gex_20201104.csv",
+                        header = TRUE, 
+                        stringsAsFactors = FALSE, check.names = FALSE)
+  
+  ### change data.table to data.frame
+  jardine_data <- setDF(jardine_data)
+  
+  ### set gene names as row names
+  rownames(jardine_data) <- jardine_data[,1]
+  jardine_data <- jardine_data[,-1]
+  
+  ### make a seurat object from the count matrix
+  jardine_seurat <- CreateSeuratObject(counts = jardine_data,
+                                       project = "Jardine",
+                                       assay = "RNA",
+                                       meta.data = NULL)
+  
+  ### pre-process
+  
+  ### MT percentage
+  jardine_seurat[["percent.mt"]] <- PercentageFeatureSet(jardine_seurat, pattern = "^MT-")
+  
+  ### normalization
+  jardine_seurat <- NormalizeData(jardine_seurat,
+                                  normalization.method = "LogNormalize", scale.factor = 10000)
+  
+  ### Cell cycle score (will be used later for regression out)
+  jardine_seurat <- CellCycleScoring(object = jardine_seurat,
+                                     g2m.features = cc.genes$g2m.genes,
+                                     s.features = cc.genes$s.genes)
+  
+  ### find variable genes
+  jardine_seurat <- FindVariableFeatures(jardine_seurat,
+                                         selection.method = "vst", nfeatures = 2000)
+  
+  ### scaling
+  jardine_seurat <- ScaleData(jardine_seurat,
+                              vars.to.regress = c("nCount_RNA", "percent.mt", "S.Score", "G2M.Score"))
+  
+  ### PCA
+  jardine_seurat <- RunPCA(jardine_seurat,
+                           features = VariableFeatures(object = jardine_seurat),
+                           npcs = 50)
+  
+  ### draw elbow plot to see how many PCAs are appropriate
+  ElbowPlot(jardine_seurat, ndims = 50, reduction = "pca")
+  
+  ### UMAP
+  jardine_seurat <- RunUMAP(jardine_seurat, dims = 1:50)
+  
+  ### save the object
+  saveRDS(object = jardine_seurat,
+          file = "./data/Jardine_SeuratObj.RDS")
+  
+  ### print UMAP
+  DimPlot(object = jardine_seurat, reduction = "umap", raster = TRUE,
+          group.by = NULL, pt.size = 1)
+  
+  
+  
+  
+  
+  
+  
   
   
   
