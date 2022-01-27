@@ -44,9 +44,18 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
     install.packages("data.table")
     require(data.table, quietly = TRUE)
   }
-  remotes::install_github('chris-mcginnis-ucsf/DoubletFinder')
-  require(DoubletFinder, quietly = TRUE)
-  
+  if(!require(remotes, quietly = TRUE)) {
+    install.packages("remotes")
+    require(remotes, quietly = TRUE)
+  }
+  if(!require(reticulate, quietly = TRUE)) {
+    install.packages("reticulate")
+    require(reticulate, quietly = TRUE)
+  }
+  # remotes::install_github('chris-mcginnis-ucsf/DoubletFinder')
+  # require(DoubletFinder, quietly = TRUE)
+  # remotes::install_github("mojaveazure/seurat-disk")
+  # require(SeuratDisk, quietly = TRUE)
   
   ## updated stroma RDS file
   Updated_Seurat_Obj <- readRDS(file = inputDataPath)
@@ -454,74 +463,77 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   ### 2.) Pull out what they have annotated as HSC/MPP, recluster, and then perform GO analysis on the clusters
   ### to see if there is any overlap in the GO terms between their HSC/MPPs and our HSCs.
   
-  ### load the Jardine data
-  jardine_meta <- read.table(file = "./data/E-MTAB-9389.sdrf.txt",
-                             sep = "\t", header = TRUE,
-                             stringsAsFactors = FALSE, check.names = FALSE)
-  jardine_data <- fread(file = "./data/fbm_tot_gex_20201104.csv",
-                        header = TRUE, 
-                        stringsAsFactors = FALSE, check.names = FALSE)
+  # ### load the Jardine data
+  # jardine_meta <- read.table(file = "./data/E-MTAB-9389.sdrf.txt",
+  #                            sep = "\t", header = TRUE,
+  #                            stringsAsFactors = FALSE, check.names = FALSE)
+  # jardine_data <- fread(file = "./data/fbm_tot_gex_20201104.csv",
+  #                       header = TRUE, 
+  #                       stringsAsFactors = FALSE, check.names = FALSE)
+  # 
+  # ### change data.table to data.frame
+  # jardine_data <- setDF(jardine_data)
+  # 
+  # ### set gene names as row names
+  # rownames(jardine_data) <- jardine_data[,1]
+  # jardine_data <- jardine_data[,-1]
+  # 
+  # ### make a seurat object from the count matrix
+  # jardine_seurat <- CreateSeuratObject(counts = jardine_data,
+  #                                      project = "Jardine",
+  #                                      assay = "RNA",
+  #                                      meta.data = NULL)
+  # 
+  # ### pre-process
+  # 
+  # ### MT percentage
+  # jardine_seurat[["percent.mt"]] <- PercentageFeatureSet(jardine_seurat, pattern = "^MT-")
+  # 
+  # ### normalization
+  # jardine_seurat <- NormalizeData(jardine_seurat,
+  #                                 normalization.method = "LogNormalize", scale.factor = 10000)
+  # 
+  # ### Cell cycle score (will be used later for regression out)
+  # jardine_seurat <- CellCycleScoring(object = jardine_seurat,
+  #                                    g2m.features = cc.genes$g2m.genes,
+  #                                    s.features = cc.genes$s.genes)
+  # 
+  # ### find variable genes
+  # jardine_seurat <- FindVariableFeatures(jardine_seurat,
+  #                                        selection.method = "vst", nfeatures = 2000)
+  # 
+  # ### scaling
+  # jardine_seurat <- ScaleData(jardine_seurat,
+  #                             vars.to.regress = c("nCount_RNA", "percent.mt", "S.Score", "G2M.Score"))
+  # 
+  # ### PCA
+  # jardine_seurat <- RunPCA(jardine_seurat,
+  #                          features = VariableFeatures(object = jardine_seurat),
+  #                          npcs = 50)
+  # 
+  # ### draw elbow plot to see how many PCAs are appropriate
+  # ElbowPlot(jardine_seurat, ndims = 50, reduction = "pca")
+  # 
+  # ### UMAP
+  # jardine_seurat <- RunUMAP(jardine_seurat, dims = 1:50)
+  # 
+  # ### save the object
+  # saveRDS(object = jardine_seurat,
+  #         file = "./data/Jardine_SeuratObj.RDS")
+  # 
+  # ### print UMAP
+  # DimPlot(object = jardine_seurat, reduction = "umap", raster = TRUE,
+  #         group.by = NULL, pt.size = 1)
   
-  ### change data.table to data.frame
-  jardine_data <- setDF(jardine_data)
+  ### we got a combined and annotated data so load it instead of building from scratch
   
-  ### set gene names as row names
-  rownames(jardine_data) <- jardine_data[,1]
-  jardine_data <- jardine_data[,-1]
+  ### convert h5ad to h5seurat and load
+  Convert(source = "./data/fig1b_fbm_scaled_gex_updated_dr_20210104.h5ad", dest = "h5seurat")
+  jardine_seurat2 <- LoadH5Seurat("./data/fig1b_fbm_scaled_gex_updated_dr_20210104.h5seurat")
   
-  ### make a seurat object from the count matrix
-  jardine_seurat <- CreateSeuratObject(counts = jardine_data,
-                                       project = "Jardine",
-                                       assay = "RNA",
-                                       meta.data = NULL)
-  
-  ### pre-process
-  
-  ### MT percentage
-  jardine_seurat[["percent.mt"]] <- PercentageFeatureSet(jardine_seurat, pattern = "^MT-")
-  
-  ### normalization
-  jardine_seurat <- NormalizeData(jardine_seurat,
-                                  normalization.method = "LogNormalize", scale.factor = 10000)
-  
-  ### Cell cycle score (will be used later for regression out)
-  jardine_seurat <- CellCycleScoring(object = jardine_seurat,
-                                     g2m.features = cc.genes$g2m.genes,
-                                     s.features = cc.genes$s.genes)
-  
-  ### find variable genes
-  jardine_seurat <- FindVariableFeatures(jardine_seurat,
-                                         selection.method = "vst", nfeatures = 2000)
-  
-  ### scaling
-  jardine_seurat <- ScaleData(jardine_seurat,
-                              vars.to.regress = c("nCount_RNA", "percent.mt", "S.Score", "G2M.Score"))
-  
-  ### PCA
-  jardine_seurat <- RunPCA(jardine_seurat,
-                           features = VariableFeatures(object = jardine_seurat),
-                           npcs = 50)
-  
-  ### draw elbow plot to see how many PCAs are appropriate
-  ElbowPlot(jardine_seurat, ndims = 50, reduction = "pca")
-  
-  ### UMAP
-  jardine_seurat <- RunUMAP(jardine_seurat, dims = 1:50)
-  
-  ### save the object
-  saveRDS(object = jardine_seurat,
-          file = "./data/Jardine_SeuratObj.RDS")
-  
-  ### print UMAP
-  DimPlot(object = jardine_seurat, reduction = "umap", raster = TRUE,
-          group.by = NULL, pt.size = 1)
-  
-  
-  
-  
-  
-  
-  
+  ### https://satijalab.org/seurat/archive/v2.4/conversion_vignette.html
+  ad <- import("anndata", convert = FALSE)
+  obj <- ad$read_h5ad("./data/fig1b_fbm_scaled_gex_updated_dr_20210104.h5ad")
   
   
   
