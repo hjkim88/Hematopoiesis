@@ -60,6 +60,10 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
     remotes::install_github("mojaveazure/seurat-disk")
     require(SeuratDisk, quietly = TRUE)
   }
+  if(!require(xlsx, quietly = TRUE)) {
+    install.packages("xlsx")
+    require(xlsx, quietly = TRUE)
+  }
   # remotes::install_github('chris-mcginnis-ucsf/DoubletFinder')
   # require(DoubletFinder, quietly = TRUE)
   
@@ -192,6 +196,13 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
     ggsave(paste0(outputDir, "PCA_plot_", var, "_.png"), plot = p, width = 20, height = 10, dpi = 350)
   }
   
+  ### UMI distribution
+  temp <- apply(Updated_Seurat_Obj@assays$RNA@counts, 2, mean)
+  
+  
+  
+  ### 4. doublets; UMI distributions
+  ### https://github.com/chris-mcginnis-ucsf/DoubletFinder
   
   ### Basic function to convert mouse to human gene names
   convertMouseGeneList <- function(x){
@@ -200,8 +211,7 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
     mouse = useMart("ensembl", dataset = "mmusculus_gene_ensembl")
     genesV2 = getLDS(attributes = c("mgi_symbol"), filters = "mgi_symbol", values = x , mart = mouse, attributesL = c("hgnc_symbol"), martL = human, uniqueRows=T)
     humanx <- unique(genesV2[, 2])
-    # Print the first 6 genes found to the screen
-    print(head(humanx))
+    
     return(humanx)
   }
   
@@ -212,13 +222,9 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
     mouse = useMart("ensembl", dataset = "mmusculus_gene_ensembl")
     genesV2 = getLDS(attributes = c("hgnc_symbol"), filters = "hgnc_symbol", values = x , mart = human, attributesL = c("mgi_symbol"), martL = mouse, uniqueRows=T)
     humanx <- unique(genesV2[, 2])
-    # Print the first 6 genes found to the screen
-    print(head(humanx))
+    
     return(humanx)
   }
-  
-  ### 4. doublets; UMI distributions
-  ### https://github.com/chris-mcginnis-ucsf/DoubletFinder
   
   ### divide the data into different time points
   ### because I believe they were from different lanes
@@ -463,6 +469,7 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   ### Reviewer #1 - 3.
   ### The authors should also incorporate some comparative analyses with the human fetal bone marrow recently published
   ### by Jardine et al. It would be helpful for the field to have some high level discussion of similarities and differences.
+  ### Jardine: 13-17 week human data
   
   ### -> 1.) Pull out what they have annotated as stroma and HSC/MPP and run them through our RNA-Magnet pipeline
   ### (with ligand coming from Stroma and receptor coming from HSC/MPP).
@@ -470,7 +477,7 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   ### to see if there is any overlap in the GO terms between their HSC/MPPs and our HSCs.
   
   # Basic function to convert mouse to human gene names
-  convertMouseGeneList <- function(x){
+  convertMouseGeneList2 <- function(x){
     if(!require(biomaRt, quietly = TRUE)) {
       BiocManager::install("biomaRt")
       require(biomaRt, quietly = TRUE)
@@ -484,7 +491,7 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   }
   
   # Basic function to convert human to mouse gene names
-  convertHumanGeneList <- function(x){
+  convertHumanGeneList2 <- function(x){
     if(!require(biomaRt, quietly = TRUE)) {
       BiocManager::install("biomaRt")
       require(biomaRt, quietly = TRUE)
@@ -545,7 +552,7 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
     ### if the input seurat is a human data
     if(human) {
       ### get mapping data
-      tempGenes <- convertHumanGeneList(rownames(seurat.raw.data))
+      tempGenes <- convertHumanGeneList2(rownames(seurat.raw.data))
       
       ### only retain genes those have mouse genes
       seurat.raw.data <- seurat.raw.data[unique(tempGenes[,1]),]
@@ -678,7 +685,7 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   }
   
   ### RNAMagnetSignaling
-  RNAMagnetSignaling <- function(seurat, human=FALSE, neighborhood.distance = NULL, neighborhood.gradient = NULL, .k = 10, .x0 = 0.5, .minExpression = 10, .minMolecules = 1, .version = "1.0.0", .cellularCompartment = c("Secreted","Both"), .manualAnnotation = "Correct" ) {
+  RNAMagnetSignaling <- function(seurat, anchors=NULL, human=FALSE, neighborhood.distance = NULL, neighborhood.gradient = NULL, .k = 10, .x0 = 0.5, .minExpression = 10, .minMolecules = 1, .version = "1.0.0", .cellularCompartment = c("Secreted","Both"), .manualAnnotation = "Correct" ) {
     
     RNAMagnetBase(seurat, anchors = NULL, human, neighborhood.distance,neighborhood.gradient, .k, .x0, .minExpression, .minMolecules, .version, .cellularCompartment, .manualAnnotation, FALSE)
     
@@ -770,15 +777,715 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   subset_jardine_obj <- FindVariableFeatures(subset_jardine_obj)
   subset_jardine_obj <- ScaleData(subset_jardine_obj)
   subset_jardine_obj <- RunPCA(subset_jardine_obj, npcs = 15)
+  ElbowPlot(subset_jardine_obj, ndims = 15, reduction = "pca")
+  subset_jardine_obj <- RunUMAP(subset_jardine_obj, dims = 1:15)
   
   ### run RNAMagnet with anchors
   subset_jardine_obj <- SetIdent(object = subset_jardine_obj,
                                  cells = rownames(subset_jardine_obj@meta.data),
                                  value = subset_jardine_obj$broad_fig1_cell.labels)
+  subset_jardine_obj$broad_fig1_cell.labels <- factor(subset_jardine_obj$broad_fig1_cell.labels,
+                                                      levels = as.character(unique(subset_jardine_obj$broad_fig1_cell.labels)))
   result <- RNAMagnetAnchors(seurat = subset_jardine_obj,
-                             anchors = unique(subset_jardine_obj$broad_fig1_cell.labels),
+                             anchors = levels(subset_jardine_obj$broad_fig1_cell.labels),
                              human = TRUE)
+  # saveRDS(result, file = "./rnamagnet_anchor_result.rds")
   
+  ### write the result as an Excel file
+  write.xlsx2(data.frame(Cell=rownames(result), result,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "RNAMagnet_Anchors_Jardine.xlsx"),
+              sheetName = paste0("RNAMagnet_Result"),
+              row.names = FALSE)
+  
+  ### add RNAMagnet info to the seurat object
+  subset_jardine_obj$direction <- as.character(result[rownames(subset_jardine_obj@meta.data),"direction"])
+  subset_jardine_obj$adhesiveness <- as.numeric(result[rownames(subset_jardine_obj@meta.data),"adhesiveness"])
+  subset_jardine_obj$specificity <- as.numeric(sapply(rownames(subset_jardine_obj@meta.data), function(x) {
+    result[x, result[x,"direction"]]
+  }))
+  
+  ### make a data frame for ggplot
+  dim_map <- Embeddings(subset_jardine_obj, reduction = "umap")[rownames(subset_jardine_obj@meta.data),]
+  plot_df <- data.frame(X=dim_map[rownames(subset_jardine_obj@meta.data),1],
+                        Y=dim_map[rownames(subset_jardine_obj@meta.data),2],
+                        cluster_color = subset_jardine_obj$broad_fig1_cell.labels,
+                        direction = subset_jardine_obj@meta.data$direction,
+                        adhesiveness = subset_jardine_obj@meta.data$adhesiveness,
+                        specificity = subset_jardine_obj@meta.data$specificity,
+                        stringsAsFactors = FALSE, check.names = FALSE)
+  
+  ### draw a scatter plot with the adhesiveness info
+  p <- list()
+  p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+    geom_point(aes_string(col="cluster_color"), size=2, alpha=0.5) +
+    xlab("UMAP1") + ylab("UMAP2") +
+    labs(col="Cluster") +
+    ggtitle("UMAP with Cell Type") +
+    scale_color_brewer(palette="Dark2") +
+    theme_classic(base_size = 40) +
+    theme(plot.title = element_text(hjust = 0.5, color = "black", face = "bold"),
+          axis.text.x = element_text(angle = 0, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"),
+          axis.text.y = element_text(angle = 0, vjust = 0.5, hjust = 1, color = "black", face = "bold"),
+          axis.title = element_text(color = "black", face = "bold"),
+          legend.title = element_text(size = 30, color = "black", face = "bold"),
+          legend.text = element_text(size = 25, color = "black", face = "bold"),
+          legend.key.size = unit(1, 'cm'))
+  ### the id column in the plot_df should be a factor
+  # p[[1]] <- LabelClusters(plot = p[[1]], id = "cluster_color", col = "black")
+  
+  p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+    geom_point(aes_string(col="direction", alpha="adhesiveness"), size=2) +
+    xlab("UMAP1") + ylab("UMAP2") +
+    labs(col="Direction", alpha="Adhesiveness") +
+    ggtitle("UMAP with Direction & Adhesiveness") +
+    scale_color_brewer(palette="Set1") +
+    theme_classic(base_size = 40) +
+    theme(plot.title = element_text(hjust = 0.5, color = "black", face = "bold"),
+          axis.text.x = element_text(angle = 0, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"),
+          axis.text.y = element_text(angle = 0, vjust = 0.5, hjust = 1, color = "black", face = "bold"),
+          axis.title = element_text(color = "black", face = "bold"),
+          legend.title = element_text(size = 30, color = "black", face = "bold"),
+          legend.text = element_text(size = 25, color = "black", face = "bold"),
+          legend.key.size = unit(1, 'cm'))
+  ### the id column in the plot_df should be a factor
+  # p[[2]] <- LabelClusters(plot = p[[2]], id = "cluster_color", col = "black")
+  
+  p[[3]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+    geom_point(aes_string(col="direction", alpha="specificity"), size=2) +
+    xlab("UMAP1") + ylab("UMAP2") +
+    labs(col="Direction", alpha="Specificity") +
+    ggtitle("UMAP with Direction & Specificity") +
+    scale_color_brewer(palette="Set1") +
+    theme_classic(base_size = 40) +
+    theme(plot.title = element_text(hjust = 0.5, color = "black", face = "bold"),
+          axis.text.x = element_text(angle = 0, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"),
+          axis.text.y = element_text(angle = 0, vjust = 0.5, hjust = 1, color = "black", face = "bold"),
+          axis.title = element_text(color = "black", face = "bold"),
+          legend.title = element_text(size = 30, color = "black", face = "bold"),
+          legend.text = element_text(size = 25, color = "black", face = "bold"),
+          legend.key.size = unit(1, 'cm'))
+  ### the id column in the plot_df should be a factor
+  # p[[3]] <- LabelClusters(plot = p[[3]], id = "cluster_color", col = "black")
+  
+  ### save the plots
+  g <- arrangeGrob(grobs = list(p[[1]], p[[3]]),
+                   nrow = 1,
+                   ncol = 2,
+                   top = "")
+  ggsave(file = paste0(outputDir, "RNAMagnet_Anchors_Jardine.png"), g, width = 30, height = 10, dpi = 350)
+  
+  
+  ### RNAMagnet signaling
+  result2 <- RNAMagnetSignaling(seurat = subset_jardine_obj,
+                                human = TRUE)
+  # saveRDS(result2, file = "./rnamagnet_signaling_result.rds")
+  
+  ### get all the interaction list
+  interaction_list <- NULL
+  for(clust1 in levels(subset_jardine_obj$broad_fig1_cell.labels)) {
+    for(clust2 in levels(subset_jardine_obj$broad_fig1_cell.labels)) {
+      il <- getRNAMagnetGenes(result2, clust1, clust2, thresh = 0)
+      if(nrow(il) > 0) {
+        il$ligand_cluster <- clust1
+        il$receptor_cluster <- clust2
+        if(is.null(interaction_list)) {
+          interaction_list <- il
+        } else {
+          interaction_list <- rbind(interaction_list, il)
+        }
+      }
+    }
+  }
+  interaction_list <- cbind(interaction_list[3:4], interaction_list[1:2])
+  colnames(interaction_list) <- c("Ligand_Cluster", "Receptor_Cluster", "Interaction_Score", "Interaction_Pair")
+  
+  ### write out the interaction list
+  write.xlsx2(interaction_list,
+              file = paste0(outputDir, "RNAMagnet_Signaling_Jardine.xlsx"),
+              sheetName = paste0("Signaling_RNAMagnet_Interaction_List"),
+              row.names = FALSE)
+  
+  ###
+  ### Now pull ours
+  ###
+  
+  ### define our annotation specifically
+  ### MPP/Stroma & E16, E18, and P0
+  Updated_Seurat_Obj$New_HSPC <- Updated_Seurat_Obj$HSPC
+  Updated_Seurat_Obj$New_HSPC[which(Updated_Seurat_Obj$New_HSPC %in% c("LTHSC", "STHSC", "MPP2", "MPP3", "MPP4"))] <- "HSPC"
+  Updated_Seurat_Obj$New_Anno <- paste0(Updated_Seurat_Obj$Development, "_", Updated_Seurat_Obj$New_HSPC)
+  
+  ### pull out E16 HSC/MPP and Stroma only
+  print(unique(Updated_Seurat_Obj$New_Anno))
+  subset_our_obj1 <- subset(Updated_Seurat_Obj,
+                            cells = rownames(Updated_Seurat_Obj@meta.data)[which(Updated_Seurat_Obj$New_Anno %in% c("E16_HSPC", "E16_Stroma"))])
+  
+  ### run PCA and UMAP
+  subset_our_obj1 <- FindVariableFeatures(subset_our_obj1)
+  subset_our_obj1 <- ScaleData(subset_our_obj1)
+  subset_our_obj1 <- RunPCA(subset_our_obj1, npcs = 15)
+  ElbowPlot(subset_our_obj1, ndims = 15, reduction = "pca")
+  subset_our_obj1 <- RunUMAP(subset_our_obj1, dims = 1:15)
+  
+  ### run RNAMagnet with anchors
+  subset_our_obj1 <- SetIdent(object = subset_our_obj1,
+                              cells = rownames(subset_our_obj1@meta.data),
+                              value = subset_our_obj1$New_Anno)
+  subset_our_obj1$New_Anno <- factor(subset_our_obj1$New_Anno,
+                                     levels = as.character(unique(subset_our_obj1$New_Anno)))
+  our_result_E16 <- RNAMagnetAnchors(seurat = subset_our_obj1,
+                                     anchors = levels(subset_our_obj1$New_Anno),
+                                     human = FALSE)
+  
+  ### write the result as an Excel file
+  write.xlsx2(data.frame(Cell=rownames(our_result_E16), our_result_E16,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "RNAMagnet_Anchors_Ours_E16.xlsx"),
+              sheetName = paste0("RNAMagnet_Result"),
+              row.names = FALSE)
+  
+  ### add RNAMagnet info to the seurat object
+  subset_our_obj1$direction <- as.character(our_result_E16[rownames(subset_our_obj1@meta.data),"direction"])
+  subset_our_obj1$adhesiveness <- as.numeric(our_result_E16[rownames(subset_our_obj1@meta.data),"adhesiveness"])
+  subset_our_obj1$specificity <- as.numeric(sapply(rownames(subset_our_obj1@meta.data), function(x) {
+    our_result_E16[x, our_result_E16[x,"direction"]]
+  }))
+  
+  ### make a data frame for ggplot
+  dim_map <- Embeddings(subset_our_obj1, reduction = "umap")[rownames(subset_our_obj1@meta.data),]
+  plot_df <- data.frame(X=dim_map[rownames(subset_our_obj1@meta.data),1],
+                        Y=dim_map[rownames(subset_our_obj1@meta.data),2],
+                        cluster_color = subset_our_obj1$New_Anno,
+                        direction = subset_our_obj1@meta.data$direction,
+                        adhesiveness = subset_our_obj1@meta.data$adhesiveness,
+                        specificity = subset_our_obj1@meta.data$specificity,
+                        stringsAsFactors = FALSE, check.names = FALSE)
+  
+  ### draw a scatter plot with the adhesiveness info
+  p <- list()
+  p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+    geom_point(aes_string(col="cluster_color"), size=2, alpha=0.5) +
+    xlab("UMAP1") + ylab("UMAP2") +
+    labs(col="Cluster") +
+    ggtitle("UMAP with Cell Type") +
+    scale_color_brewer(palette="Dark2") +
+    theme_classic(base_size = 40) +
+    theme(plot.title = element_text(hjust = 0.5, color = "black", face = "bold"),
+          axis.text.x = element_text(angle = 0, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"),
+          axis.text.y = element_text(angle = 0, vjust = 0.5, hjust = 1, color = "black", face = "bold"),
+          axis.title = element_text(color = "black", face = "bold"),
+          legend.title = element_text(size = 30, color = "black", face = "bold"),
+          legend.text = element_text(size = 25, color = "black", face = "bold"),
+          legend.key.size = unit(1, 'cm'))
+  ### the id column in the plot_df should be a factor
+  # p[[1]] <- LabelClusters(plot = p[[1]], id = "cluster_color", col = "black")
+  
+  p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+    geom_point(aes_string(col="direction", alpha="specificity"), size=2) +
+    xlab("UMAP1") + ylab("UMAP2") +
+    labs(col="Direction", alpha="Specificity") +
+    ggtitle("UMAP with Direction & Specificity") +
+    scale_color_brewer(palette="Set1") +
+    theme_classic(base_size = 40) +
+    theme(plot.title = element_text(hjust = 0.5, color = "black", face = "bold"),
+          axis.text.x = element_text(angle = 0, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"),
+          axis.text.y = element_text(angle = 0, vjust = 0.5, hjust = 1, color = "black", face = "bold"),
+          axis.title = element_text(color = "black", face = "bold"),
+          legend.title = element_text(size = 30, color = "black", face = "bold"),
+          legend.text = element_text(size = 25, color = "black", face = "bold"),
+          legend.key.size = unit(1, 'cm'))
+  ### the id column in the plot_df should be a factor
+  # p[[2]] <- LabelClusters(plot = p[[3]], id = "cluster_color", col = "black")
+  
+  ### save the plots
+  g <- arrangeGrob(grobs = p,
+                   nrow = 1,
+                   ncol = 2,
+                   top = "")
+  ggsave(file = paste0(outputDir, "RNAMagnet_Anchors_Ours_E16.png"), g, width = 30, height = 10, dpi = 350)
+  
+  
+  ### pull out E18 HSC/MPP and Stroma only
+  print(unique(Updated_Seurat_Obj$New_Anno))
+  subset_our_obj2 <- subset(Updated_Seurat_Obj,
+                            cells = rownames(Updated_Seurat_Obj@meta.data)[which(Updated_Seurat_Obj$New_Anno %in% c("E18_HSPC", "E18_Stroma"))])
+  
+  ### run PCA and UMAP
+  subset_our_obj2 <- FindVariableFeatures(subset_our_obj2)
+  subset_our_obj2 <- ScaleData(subset_our_obj2)
+  subset_our_obj2 <- RunPCA(subset_our_obj2, npcs = 15)
+  ElbowPlot(subset_our_obj2, ndims = 15, reduction = "pca")
+  subset_our_obj2 <- RunUMAP(subset_our_obj2, dims = 1:15)
+  
+  ### run RNAMagnet with anchors
+  subset_our_obj2 <- SetIdent(object = subset_our_obj2,
+                              cells = rownames(subset_our_obj2@meta.data),
+                              value = subset_our_obj2$New_Anno)
+  subset_our_obj2$New_Anno <- factor(subset_our_obj2$New_Anno,
+                                     levels = as.character(unique(subset_our_obj2$New_Anno)))
+  our_result_E18 <- RNAMagnetAnchors(seurat = subset_our_obj2,
+                                     anchors = levels(subset_our_obj2$New_Anno),
+                                     human = FALSE)
+  
+  ### write the result as an Excel file
+  write.xlsx2(data.frame(Cell=rownames(our_result_E18), our_result_E18,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "RNAMagnet_Anchors_Ours_E18.xlsx"),
+              sheetName = paste0("RNAMagnet_Result"),
+              row.names = FALSE)
+  
+  ### add RNAMagnet info to the seurat object
+  subset_our_obj2$direction <- as.character(our_result_E18[rownames(subset_our_obj2@meta.data),"direction"])
+  subset_our_obj2$adhesiveness <- as.numeric(our_result_E18[rownames(subset_our_obj2@meta.data),"adhesiveness"])
+  subset_our_obj2$specificity <- as.numeric(sapply(rownames(subset_our_obj2@meta.data), function(x) {
+    our_result_E18[x, our_result_E18[x,"direction"]]
+  }))
+  
+  ### make a data frame for ggplot
+  dim_map <- Embeddings(subset_our_obj2, reduction = "umap")[rownames(subset_our_obj2@meta.data),]
+  plot_df <- data.frame(X=dim_map[rownames(subset_our_obj2@meta.data),1],
+                        Y=dim_map[rownames(subset_our_obj2@meta.data),2],
+                        cluster_color = subset_our_obj2$New_Anno,
+                        direction = subset_our_obj2@meta.data$direction,
+                        adhesiveness = subset_our_obj2@meta.data$adhesiveness,
+                        specificity = subset_our_obj2@meta.data$specificity,
+                        stringsAsFactors = FALSE, check.names = FALSE)
+  
+  ### draw a scatter plot with the adhesiveness info
+  p <- list()
+  p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+    geom_point(aes_string(col="cluster_color"), size=2, alpha=0.5) +
+    xlab("UMAP1") + ylab("UMAP2") +
+    labs(col="Cluster") +
+    ggtitle("UMAP with Cell Type") +
+    scale_color_brewer(palette="Dark2") +
+    theme_classic(base_size = 40) +
+    theme(plot.title = element_text(hjust = 0.5, color = "black", face = "bold"),
+          axis.text.x = element_text(angle = 0, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"),
+          axis.text.y = element_text(angle = 0, vjust = 0.5, hjust = 1, color = "black", face = "bold"),
+          axis.title = element_text(color = "black", face = "bold"),
+          legend.title = element_text(size = 30, color = "black", face = "bold"),
+          legend.text = element_text(size = 25, color = "black", face = "bold"),
+          legend.key.size = unit(1, 'cm'))
+  ### the id column in the plot_df should be a factor
+  # p[[1]] <- LabelClusters(plot = p[[1]], id = "cluster_color", col = "black")
+  
+  p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+    geom_point(aes_string(col="direction", alpha="specificity"), size=2) +
+    xlab("UMAP1") + ylab("UMAP2") +
+    labs(col="Direction", alpha="Specificity") +
+    ggtitle("UMAP with Direction & Specificity") +
+    scale_color_brewer(palette="Set1") +
+    theme_classic(base_size = 40) +
+    theme(plot.title = element_text(hjust = 0.5, color = "black", face = "bold"),
+          axis.text.x = element_text(angle = 0, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"),
+          axis.text.y = element_text(angle = 0, vjust = 0.5, hjust = 1, color = "black", face = "bold"),
+          axis.title = element_text(color = "black", face = "bold"),
+          legend.title = element_text(size = 30, color = "black", face = "bold"),
+          legend.text = element_text(size = 25, color = "black", face = "bold"),
+          legend.key.size = unit(1, 'cm'))
+  ### the id column in the plot_df should be a factor
+  # p[[2]] <- LabelClusters(plot = p[[3]], id = "cluster_color", col = "black")
+  
+  ### save the plots
+  g <- arrangeGrob(grobs = p,
+                   nrow = 1,
+                   ncol = 2,
+                   top = "")
+  ggsave(file = paste0(outputDir, "RNAMagnet_Anchors_Ours_E18.png"), g, width = 30, height = 10, dpi = 350)
+  
+  
+  ### pull out P0 HSC/MPP and Stroma only
+  print(unique(Updated_Seurat_Obj$New_Anno))
+  subset_our_obj3 <- subset(Updated_Seurat_Obj,
+                            cells = rownames(Updated_Seurat_Obj@meta.data)[which(Updated_Seurat_Obj$New_Anno %in% c("P0_HSPC", "P0_Stroma"))])
+  
+  ### run PCA and UMAP
+  subset_our_obj3 <- FindVariableFeatures(subset_our_obj3)
+  subset_our_obj3 <- ScaleData(subset_our_obj3)
+  subset_our_obj3 <- RunPCA(subset_our_obj3, npcs = 15)
+  ElbowPlot(subset_our_obj3, ndims = 15, reduction = "pca")
+  subset_our_obj3 <- RunUMAP(subset_our_obj3, dims = 1:15)
+  
+  ### run RNAMagnet with anchors
+  subset_our_obj3 <- SetIdent(object = subset_our_obj3,
+                              cells = rownames(subset_our_obj3@meta.data),
+                              value = subset_our_obj3$New_Anno)
+  subset_our_obj3$New_Anno <- factor(subset_our_obj3$New_Anno,
+                                     levels = as.character(unique(subset_our_obj3$New_Anno)))
+  our_result_P0 <- RNAMagnetAnchors(seurat = subset_our_obj3,
+                                    anchors = levels(subset_our_obj3$New_Anno),
+                                    human = FALSE)
+  
+  ### write the result as an Excel file
+  write.xlsx2(data.frame(Cell=rownames(our_result_P0), our_result_P0,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "RNAMagnet_Anchors_Ours_P0.xlsx"),
+              sheetName = paste0("RNAMagnet_Result"),
+              row.names = FALSE)
+  
+  ### add RNAMagnet info to the seurat object
+  subset_our_obj3$direction <- as.character(our_result_P0[rownames(subset_our_obj3@meta.data),"direction"])
+  subset_our_obj3$adhesiveness <- as.numeric(our_result_P0[rownames(subset_our_obj3@meta.data),"adhesiveness"])
+  subset_our_obj3$specificity <- as.numeric(sapply(rownames(subset_our_obj3@meta.data), function(x) {
+    our_result_P0[x, our_result_P0[x,"direction"]]
+  }))
+  
+  ### make a data frame for ggplot
+  dim_map <- Embeddings(subset_our_obj3, reduction = "umap")[rownames(subset_our_obj3@meta.data),]
+  plot_df <- data.frame(X=dim_map[rownames(subset_our_obj3@meta.data),1],
+                        Y=dim_map[rownames(subset_our_obj3@meta.data),2],
+                        cluster_color = subset_our_obj3$New_Anno,
+                        direction = subset_our_obj3@meta.data$direction,
+                        adhesiveness = subset_our_obj3@meta.data$adhesiveness,
+                        specificity = subset_our_obj3@meta.data$specificity,
+                        stringsAsFactors = FALSE, check.names = FALSE)
+  
+  ### draw a scatter plot with the adhesiveness info
+  p <- list()
+  p[[1]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+    geom_point(aes_string(col="cluster_color"), size=2, alpha=0.5) +
+    xlab("UMAP1") + ylab("UMAP2") +
+    labs(col="Cluster") +
+    ggtitle("UMAP with Cell Type") +
+    scale_color_brewer(palette="Dark2") +
+    theme_classic(base_size = 40) +
+    theme(plot.title = element_text(hjust = 0.5, color = "black", face = "bold"),
+          axis.text.x = element_text(angle = 0, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"),
+          axis.text.y = element_text(angle = 0, vjust = 0.5, hjust = 1, color = "black", face = "bold"),
+          axis.title = element_text(color = "black", face = "bold"),
+          legend.title = element_text(size = 30, color = "black", face = "bold"),
+          legend.text = element_text(size = 25, color = "black", face = "bold"),
+          legend.key.size = unit(1, 'cm'))
+  ### the id column in the plot_df should be a factor
+  # p[[1]] <- LabelClusters(plot = p[[1]], id = "cluster_color", col = "black")
+  
+  p[[2]] <- ggplot(plot_df, aes_string(x="X", y="Y")) +
+    geom_point(aes_string(col="direction", alpha="specificity"), size=2) +
+    xlab("UMAP1") + ylab("UMAP2") +
+    labs(col="Direction", alpha="Specificity") +
+    ggtitle("UMAP with Direction & Specificity") +
+    scale_color_brewer(palette="Set1") +
+    theme_classic(base_size = 40) +
+    theme(plot.title = element_text(hjust = 0.5, color = "black", face = "bold"),
+          axis.text.x = element_text(angle = 0, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"),
+          axis.text.y = element_text(angle = 0, vjust = 0.5, hjust = 1, color = "black", face = "bold"),
+          axis.title = element_text(color = "black", face = "bold"),
+          legend.title = element_text(size = 30, color = "black", face = "bold"),
+          legend.text = element_text(size = 25, color = "black", face = "bold"),
+          legend.key.size = unit(1, 'cm'))
+  ### the id column in the plot_df should be a factor
+  # p[[2]] <- LabelClusters(plot = p[[3]], id = "cluster_color", col = "black")
+  
+  ### save the plots
+  g <- arrangeGrob(grobs = p,
+                   nrow = 1,
+                   ncol = 2,
+                   top = "")
+  ggsave(file = paste0(outputDir, "RNAMagnet_Anchors_Ours_P0.png"), g, width = 30, height = 10, dpi = 350)
+  
+  
+  ### RNAMagnet signaling with our E16
+  result_E16 <- RNAMagnetSignaling(seurat = subset_our_obj1,
+                                   human = FALSE)
+  
+  ### get all the interaction list
+  interaction_list_E16 <- NULL
+  for(clust1 in levels(subset_our_obj1$New_Anno)) {
+    for(clust2 in levels(subset_our_obj1$New_Anno)) {
+      il <- getRNAMagnetGenes(result_E16, clust1, clust2, thresh = 0)
+      if(nrow(il) > 0) {
+        il$ligand_cluster <- clust1
+        il$receptor_cluster <- clust2
+        if(is.null(interaction_list_E16)) {
+          interaction_list_E16 <- il
+        } else {
+          interaction_list_E16 <- rbind(interaction_list_E16, il)
+        }
+      }
+    }
+  }
+  interaction_list_E16 <- cbind(interaction_list_E16[3:4], interaction_list_E16[1:2])
+  colnames(interaction_list_E16) <- c("Ligand_Cluster", "Receptor_Cluster", "Interaction_Score", "Interaction_Pair")
+  
+  ### write out the interaction list
+  write.xlsx2(interaction_list_E16,
+              file = paste0(outputDir, "RNAMagnet_Signaling_Ours_E16.xlsx"),
+              sheetName = paste0("Signaling_RNAMagnet_Interaction_List"),
+              row.names = FALSE)
+  
+  
+  ### RNAMagnet signaling with our E18
+  result_E18 <- RNAMagnetSignaling(seurat = subset_our_obj2,
+                                   human = FALSE)
+  
+  ### get all the interaction list
+  interaction_list_E18 <- NULL
+  for(clust1 in levels(subset_our_obj2$New_Anno)) {
+    for(clust2 in levels(subset_our_obj2$New_Anno)) {
+      il <- getRNAMagnetGenes(result_E18, clust1, clust2, thresh = 0)
+      if(nrow(il) > 0) {
+        il$ligand_cluster <- clust1
+        il$receptor_cluster <- clust2
+        if(is.null(interaction_list_E18)) {
+          interaction_list_E18 <- il
+        } else {
+          interaction_list_E18 <- rbind(interaction_list_E18, il)
+        }
+      }
+    }
+  }
+  interaction_list_E18 <- cbind(interaction_list_E18[3:4], interaction_list_E18[1:2])
+  colnames(interaction_list_E18) <- c("Ligand_Cluster", "Receptor_Cluster", "Interaction_Score", "Interaction_Pair")
+  
+  ### write out the interaction list
+  write.xlsx2(interaction_list_E18,
+              file = paste0(outputDir, "RNAMagnet_Signaling_Ours_E18.xlsx"),
+              sheetName = paste0("Signaling_RNAMagnet_Interaction_List"),
+              row.names = FALSE)
+  
+  
+  ### RNAMagnet signaling with our P0
+  result_P0 <- RNAMagnetSignaling(seurat = subset_our_obj3,
+                                  human = FALSE)
+  
+  ### get all the interaction list
+  interaction_list_P0 <- NULL
+  for(clust1 in levels(subset_our_obj3$New_Anno)) {
+    for(clust2 in levels(subset_our_obj3$New_Anno)) {
+      il <- getRNAMagnetGenes(result_P0, clust1, clust2, thresh = 0)
+      if(nrow(il) > 0) {
+        il$ligand_cluster <- clust1
+        il$receptor_cluster <- clust2
+        if(is.null(interaction_list_P0)) {
+          interaction_list_P0 <- il
+        } else {
+          interaction_list_P0 <- rbind(interaction_list_P0, il)
+        }
+      }
+    }
+  }
+  interaction_list_P0 <- cbind(interaction_list_P0[3:4], interaction_list_P0[1:2])
+  colnames(interaction_list_P0) <- c("Ligand_Cluster", "Receptor_Cluster", "Interaction_Score", "Interaction_Pair")
+  
+  ### write out the interaction list
+  write.xlsx2(interaction_list_P0,
+              file = paste0(outputDir, "RNAMagnet_Signaling_Ours_P0.xlsx"),
+              sheetName = paste0("Signaling_RNAMagnet_Interaction_List"),
+              row.names = FALSE)
+  
+  
+  ### correlation plot between the interaction scores
+  ### ligand stroma, receptor MPP
+  interaction_list2 <- interaction_list[intersect(which(interaction_list$Ligand_Cluster == "stroma"),
+                                                  which(interaction_list$Receptor_Cluster == "HSC/MPP and pro")),]
+  interaction_list2_E16 <- interaction_list_E16[intersect(which(interaction_list_E16$Ligand_Cluster == "E16_Stroma"),
+                                                          which(interaction_list_E16$Receptor_Cluster == "E16_HSPC")),]
+  interaction_list2_E18 <- interaction_list_E18[intersect(which(interaction_list_E18$Ligand_Cluster == "E18_Stroma"),
+                                                          which(interaction_list_E18$Receptor_Cluster == "E18_HSPC")),]
+  interaction_list2_P0 <- interaction_list_P0[intersect(which(interaction_list_P0$Ligand_Cluster == "P0_Stroma"),
+                                                        which(interaction_list_P0$Receptor_Cluster == "P0_HSPC")),]
+  
+  temp1 <- merge(x = interaction_list2, y = interaction_list2_E16,
+                 by.x = "Interaction_Pair", by.y = "Interaction_Pair",
+                 all.x = FALSE, all.y = FALSE)
+  temp1 <- temp1[,c("Interaction_Pair", "Interaction_Score.x", "Interaction_Score.y")]
+  colnames(temp1)[2:3] <- c("Jardine", "Our_E16")
+  temp2 <- merge(x = interaction_list2_E18, y = interaction_list2_P0,
+                 by.x = "Interaction_Pair", by.y = "Interaction_Pair",
+                 all.x = FALSE, all.y = FALSE)
+  temp2 <- temp2[,c("Interaction_Pair", "Interaction_Score.x", "Interaction_Score.y")]
+  colnames(temp2)[2:3] <- c("Our_E18", "Our_P0")
+  
+  plot_df <- merge(x = temp1, y = temp2,
+                   by.x = "Interaction_Pair", by.y = "Interaction_Pair",
+                   all.x = FALSE, all.y = FALSE)
+  plot_df2 <- data.frame(Interaction_Pair=rep(plot_df$Interaction_Pair, 4),
+                         Interaction_Score=c(plot_df$Jardine,
+                                             plot_df$Our_E16,
+                                             plot_df$Our_E18,
+                                             plot_df$Our_P0),
+                         Group=c(rep("Jardine", nrow(plot_df)),
+                                 rep("E16", nrow(plot_df)),
+                                 rep("E18", nrow(plot_df)),
+                                 rep("P0", nrow(plot_df))),
+                         stringsAsFactors = FALSE, check.names = FALSE)
+  
+  ### first, line plot of all the 4
+  plot_df2$Group <- factor(plot_df2$Group, levels = c("E16", "E18", "P0", "Jardine"))
+  p <- ggplot(data = plot_df2, aes_string(x="Interaction_Pair", y="Interaction_Score", group="Group")) +
+    geom_point(aes_string(color="Group"), size = 1) +
+    geom_line(aes_string(color="Group"), size = 2) +
+    xlab("") +
+    ylab("Interaction Score") +
+    scale_color_brewer(palette="Dark2") +
+    theme_classic(base_size = 40) +
+    theme(plot.title = element_text(hjust = 0.5, color = "black", face = "bold"),
+          axis.text.x = element_blank(),
+          axis.text.y = element_text(angle = 0, vjust = 0.5, hjust = 1, color = "black", face = "bold"),
+          axis.title = element_text(color = "black", face = "bold"),
+          axis.ticks = element_blank(),
+          legend.title = element_text(size = 30, color = "black", face = "bold"),
+          legend.text = element_text(size = 25, color = "black", face = "bold"),
+          legend.key.size = unit(1, 'cm'))
+  ggsave(file = paste0(outputDir, "Interaction_Score_Comparison.png"), plot = p,
+         width = 15, height = 10, dpi = 350)
+  
+  ### now pairwise correlation plots
+  p <- list()
+  ### E16
+  s_cor <- round(cor(plot_df$Our_E16,
+                     plot_df$Jardine, method = "spearman", use = "complete.obs"), 2)
+  pv <- round(cor.test(plot_df$Our_E16,
+                       plot_df$Jardine, method = "spearman", use = "complete.obs")$p.value, 2)
+  p[[1]] <- ggplot(data = plot_df, aes(x=Our_E16, y=Jardine)) +
+    geom_point(col = "aquamarine4", size = 5) +
+    labs(title = paste0("Spearman Correlation:", s_cor),
+         subtitle = paste0("P-value:", pv)) +
+    xlab("Our E16") +
+    ylab("Jardine") +
+    geom_smooth(method = lm, color="coral3", se=TRUE) +
+    theme_classic(base_size = 40) +
+    theme(plot.title = element_text(hjust = 0, vjust = 0.5, size = 40))
+  ### E18
+  s_cor <- round(cor(plot_df$Our_E18,
+                     plot_df$Jardine, method = "spearman", use = "complete.obs"), 2)
+  pv <- round(cor.test(plot_df$Our_E18,
+                       plot_df$Jardine, method = "spearman", use = "complete.obs")$p.value, 2)
+  p[[2]] <- ggplot(data = plot_df, aes(x=Our_E18, y=Jardine)) +
+    geom_point(col = "aquamarine4", size = 5) +
+    labs(title = paste0("Spearman Correlation:", s_cor),
+         subtitle = paste0("P-value:", pv)) +
+    xlab("Our E18") +
+    ylab("Jardine") +
+    geom_smooth(method = lm, color="coral3", se=TRUE) +
+    theme_classic(base_size = 40) +
+    theme(plot.title = element_text(hjust = 0, vjust = 0.5, size = 40))
+  ### P0
+  s_cor <- round(cor(plot_df$Our_P0,
+                     plot_df$Jardine, method = "spearman", use = "complete.obs"), 2)
+  pv <- round(cor.test(plot_df$Our_P0,
+                       plot_df$Jardine, method = "spearman", use = "complete.obs")$p.value, 2)
+  p[[3]] <- ggplot(data = plot_df, aes(x=Our_P0, y=Jardine)) +
+    geom_point(col = "aquamarine4", size = 5) +
+    labs(title = paste0("Spearman Correlation:", s_cor),
+         subtitle = paste0("P-value:", pv)) +
+    xlab("Our P0") +
+    ylab("Jardine") +
+    geom_smooth(method = lm, color="coral3", se=TRUE) +
+    theme_classic(base_size = 40) +
+    theme(plot.title = element_text(hjust = 0, vjust = 0.5, size = 40))
+  
+  ### save the plots
+  g <- arrangeGrob(grobs = p,
+                   nrow = 2,
+                   ncol = 2,
+                   top = "")
+  ggsave(file = paste0(outputDir, "RNAMagnet_Signaling_Correlations.png"), g, width = 20, height = 15, dpi = 350)
+  
+  
+  ### Pull out what they have annotated as HSC/MPP, recluster, and then perform GO analysis on the clusters
+  ### to see if there is any overlap in the GO terms between their HSC/MPPs and our HSCs.
+  subset_jardine_obj2 <- subset(jardine_seurat2,
+                                cells = rownames(jardine_seurat2@meta.data)[which(jardine_seurat2$broad_fig1_cell.labels %in% c("HSC/MPP and pro"))])
+  subset_jardine_obj2 <- FindVariableFeatures(subset_jardine_obj2)
+  subset_jardine_obj2 <- ScaleData(subset_jardine_obj2)
+  subset_jardine_obj2 <- RunPCA(subset_jardine_obj2, npcs = 15)
+  ElbowPlot(subset_jardine_obj2, ndims = 15, reduction = "pca")
+  subset_jardine_obj2 <- RunUMAP(subset_jardine_obj2, dims = 1:15)
+  
+  subset_jardine_obj2 <- FindNeighbors(subset_jardine_obj2, dims = 1:15)
+  subset_jardine_obj2 <- FindClusters(subset_jardine_obj2, resolution = 0.2)
+  
+  p <- DimPlot(object = subset_jardine_obj2, reduction = "umap", raster = TRUE,
+          group.by = "seurat_clusters",
+          pt.size = 1) +
+    ggtitle("") +
+    labs(color = "seurat_clusters") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 24, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  ggsave(paste0(outputDir, "UMAP_Jardine_HSPCs.png"), plot = p, width = 20, height = 10, dpi = 350)
+  
+  ### find all markers
+  subset_jardine_obj2 <- SetIdent(object = subset_jardine_obj2,
+                                  cells = rownames(subset_jardine_obj2@meta.data),
+                                  value = subset_jardine_obj2$seurat_clusters)
+  jardine_de_result <- FindAllMarkers(subset_jardine_obj2,
+                                      min.pct = 0.2,
+                                      logfc.threshold = 0.2,
+                                      test.use = "wilcox")
+  
+  ### ours from E16, E18, and P0
+  subset_our_obj4 <- subset(Updated_Seurat_Obj,
+                            cells = rownames(Updated_Seurat_Obj@meta.data)[which(Updated_Seurat_Obj$New_HSPC %in% c("HSPC"))])
+  
+  subset_our_obj4 <- FindVariableFeatures(subset_our_obj4)
+  subset_our_obj4 <- ScaleData(subset_our_obj4)
+  subset_our_obj4 <- RunPCA(subset_our_obj4, npcs = 15)
+  ElbowPlot(subset_our_obj4, ndims = 15, reduction = "pca")
+  subset_our_obj4 <- RunUMAP(subset_our_obj4, dims = 1:15)
+  
+  subset_our_obj4 <- FindNeighbors(subset_our_obj4, dims = 1:15)
+  subset_our_obj4 <- FindClusters(subset_our_obj4, resolution = 0.2)
+  
+  p <- DimPlot(object = subset_our_obj4, reduction = "umap", raster = TRUE,
+               group.by = "seurat_clusters",
+               pt.size = 1) +
+    ggtitle("") +
+    labs(color = "seurat_clusters") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 24, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  ggsave(paste0(outputDir, "UMAP_Ours_HSPCs.png"), plot = p, width = 20, height = 10, dpi = 350)
+  
+  ### find all markers
+  subset_our_obj4 <- SetIdent(object = subset_our_obj4,
+                              cells = rownames(subset_our_obj4@meta.data),
+                              value = subset_our_obj4$seurat_clusters)
+  our_de_result <- FindAllMarkers(subset_our_obj4,
+                                  min.pct = 0.2,
+                                  logfc.threshold = 0.2,
+                                  test.use = "wilcox")
+  
+  ### now compare DE genes between Jardine and Ours
+  similarity_mat <- matrix(0, nrow = length(levels(jardine_de_result$cluster)), ncol = length(levels(our_de_result$cluster)))
+  rownames(similarity_mat) <- paste0("Jardine_", levels(jardine_de_result$cluster))
+  colnames(similarity_mat) <- paste0("Ours_", levels(our_de_result$cluster))
+  
+  ### calculate common DE genes - Jaccard Similarity (adjuated pv < 0.05)
+  for(clstr1 in levels(jardine_de_result$cluster)) {
+    for(clstr2 in levels(our_de_result$cluster)) {
+      jardine_target_genes <- jardine_de_result$gene[intersect(which(jardine_de_result$p_val_adj < 0.05),
+                                                               which(jardine_de_result$cluster == clstr1))]
+      jardine_target_genes <- convertHumanGeneList(jardine_target_genes)
+      our_target_genes <- our_de_result$gene[intersect(which(our_de_result$p_val_adj < 0.05),
+                                                       which(our_de_result$cluster == clstr2))]
+      
+      similarity_mat[paste0("Jardine_", clstr1),paste0("Ours_", clstr2)] <- length(intersect(jardine_target_genes,
+                                                                                             our_target_genes)) / length(union(jardine_target_genes,
+                                                                                                                               our_target_genes))
+    }
+  }
+  
+  ### write out the interaction list
+  write.xlsx2(data.frame(Cluster=rownames(similarity_mat),
+                         similarity_mat,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "Cluster_DE_Gene_Comparison_JS.xlsx"),
+              sheetName = paste0("Cluster_DE_Gene_Comparison"),
+              row.names = FALSE)
   
   
   
