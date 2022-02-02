@@ -208,9 +208,21 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
     ggsave(paste0(outputDir, "PCA_plot_", var, "_.png"), plot = p, width = 20, height = 10, dpi = 350)
   }
   
-  ### UMI distribution
+  ### UMI distribution - density plot
   temp <- apply(Updated_Seurat_Obj@assays$RNA@counts, 2, mean)
+  temp <- data.frame(CellNames=names(temp),
+                     Mean_UMI_Counts=temp,
+                     stringsAsFactors = FALSE, check.names = FALSE)
   
+  p <- ggplot(temp, aes(x=Mean_UMI_Counts)) +
+    geom_density(size=3, col = "blue") +
+    ylab("Density") +
+    theme_classic(base_size = 40) +
+    theme(legend.key.size = unit(1, 'cm'),
+          legend.position = "right",
+          legend.title = element_text(size = 30),
+          legend.text = element_text(size = 24))
+  ggsave(file = paste0(outputDir, "Density_UMI_Count_Distribution.png"), plot = p, width = 20, height = 10, dpi = 350)
   
   
   ### 4. doublets; UMI distributions
@@ -1491,7 +1503,7 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
     }
   }
   
-  ### write out the interaction list
+  ### write out the sim mat
   write.xlsx2(data.frame(Cluster=rownames(similarity_mat),
                          similarity_mat,
                          stringsAsFactors = FALSE, check.names = FALSE),
@@ -1712,7 +1724,44 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   }
   
   ### Pairwise GO term comparison
+  Up_Go_Sim_Mat <- matrix(0, nrow = length(levels(jardine_de_result$cluster)), ncol = length(levels(our_de_result$cluster)))
+  rownames(Up_Go_Sim_Mat) <- paste0("Jardine_", levels(jardine_de_result$cluster))
+  colnames(Up_Go_Sim_Mat) <- paste0("Ours_", levels(our_de_result$cluster))
   
+  Down_Go_Sim_Mat <- matrix(0, nrow = length(levels(jardine_de_result$cluster)), ncol = length(levels(our_de_result$cluster)))
+  rownames(Down_Go_Sim_Mat) <- paste0("Jardine_", levels(jardine_de_result$cluster))
+  colnames(Down_Go_Sim_Mat) <- paste0("Ours_", levels(our_de_result$cluster))
+  
+  ### calculate common GO terms - Jaccard Similarity (adjuated pv < 0.05)
+  for(clstr1 in levels(jardine_de_result$cluster)) {
+    for(clstr2 in levels(our_de_result$cluster)) {
+      jardine_target_up_go <- Jardine_Up_Go[[clstr1]]$ID[which(Jardine_Up_Go[[clstr1]]$p.adjust < 0.05)]
+      jardine_target_down_go <- Jardine_Down_Go[[clstr1]]$ID[which(Jardine_Down_Go[[clstr1]]$p.adjust < 0.05)]
+      our_target_up_go <- Our_Up_Go[[clstr2]]$ID[which(Our_Up_Go[[clstr2]]$p.adjust < 0.05)]
+      our_target_down_go <- Our_Down_Go[[clstr2]]$ID[which(Our_Down_Go[[clstr2]]$p.adjust < 0.05)]
+      
+      Up_Go_Sim_Mat[paste0("Jardine_", clstr1),paste0("Ours_", clstr2)] <- length(intersect(jardine_target_up_go,
+                                                                                            our_target_up_go)) / length(union(jardine_target_up_go,
+                                                                                                                              our_target_up_go))
+      Down_Go_Sim_Mat[paste0("Jardine_", clstr1),paste0("Ours_", clstr2)] <- length(intersect(jardine_target_down_go,
+                                                                                              our_target_down_go)) / length(union(jardine_target_down_go,
+                                                                                                                                  our_target_down_go))
+    }
+  }
+  
+  ### write out the sim matrix
+  write.xlsx2(data.frame(Cluster=rownames(Up_Go_Sim_Mat),
+                         Up_Go_Sim_Mat,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "Cluster_Up_GO_Term_Comparison_JS.xlsx"),
+              sheetName = paste0("Cluster_Up_GO_Term_Comparison"),
+              row.names = FALSE)
+  write.xlsx2(data.frame(Cluster=rownames(Down_Go_Sim_Mat),
+                         Down_Go_Sim_Mat,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "Cluster_Down_GO_Term_Comparison_JS.xlsx"),
+              sheetName = paste0("Cluster_Down_GO_Term_Comparison"),
+              row.names = FALSE)
   
   
   
