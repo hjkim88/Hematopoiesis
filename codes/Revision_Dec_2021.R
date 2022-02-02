@@ -224,6 +224,34 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
           legend.text = element_text(size = 24))
   ggsave(file = paste0(outputDir, "Density_UMI_Count_Distribution.png"), plot = p, width = 20, height = 10, dpi = 350)
   
+  ### Mean UMI count table
+  umi_count_mat <- matrix(0, 2, 5)
+  rownames(umi_count_mat) <- c("Mean_UMI_Counts_Freq", "Mean_UMI_Counts_Pcnt")
+  colnames(umi_count_mat) <- c("0", "0<x<=1", "1<x<=2", "2<x<=3", "3<x")
+  
+  total_cell_num <- nrow(temp)
+  umi_count_mat["Mean_UMI_Counts_Freq","0"] <- length(which(temp$Mean_UMI_Counts == 0))
+  umi_count_mat["Mean_UMI_Counts_Pcnt","0"] <- round(umi_count_mat["Mean_UMI_Counts_Freq","0"] * 100 / total_cell_num, 3)
+  umi_count_mat["Mean_UMI_Counts_Freq","0<x<=1"] <- length(intersect(which(temp$Mean_UMI_Counts > 0),
+                                                                     which(temp$Mean_UMI_Counts <= 1)))
+  umi_count_mat["Mean_UMI_Counts_Pcnt","0<x<=1"] <- round(umi_count_mat["Mean_UMI_Counts_Freq","0<x<=1"] * 100 / total_cell_num, 3)
+  umi_count_mat["Mean_UMI_Counts_Freq","1<x<=2"] <- length(intersect(which(temp$Mean_UMI_Counts > 1),
+                                                                     which(temp$Mean_UMI_Counts <= 2)))
+  umi_count_mat["Mean_UMI_Counts_Pcnt","1<x<=2"] <- round(umi_count_mat["Mean_UMI_Counts_Freq","1<x<=2"] * 100 / total_cell_num, 3)
+  umi_count_mat["Mean_UMI_Counts_Freq","2<x<=3"] <- length(intersect(which(temp$Mean_UMI_Counts > 2),
+                                                                     which(temp$Mean_UMI_Counts <= 3)))
+  umi_count_mat["Mean_UMI_Counts_Pcnt","2<x<=3"] <- round(umi_count_mat["Mean_UMI_Counts_Freq","2<x<=3"] * 100 / total_cell_num, 3)
+  umi_count_mat["Mean_UMI_Counts_Freq","3<x"] <- length(which(temp$Mean_UMI_Counts > 3))
+  umi_count_mat["Mean_UMI_Counts_Pcnt","3<x"] <- round(umi_count_mat["Mean_UMI_Counts_Freq","3<x"] * 100 / total_cell_num, 3)
+  
+  ### write out the interaction list
+  write.xlsx2(data.frame(Interval=rownames(umi_count_mat),
+                         umi_count_mat,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "UMI_Count_Distribution_Table.xlsx"),
+              sheetName = paste0("UMI_Count_Distribution_Table"),
+              row.names = FALSE)
+  
   
   ### 4. doublets; UMI distributions
   ### https://github.com/chris-mcginnis-ucsf/DoubletFinder
