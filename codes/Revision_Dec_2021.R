@@ -1655,9 +1655,10 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
                                       logfc.threshold = 0.2,
                                       test.use = "wilcox")
   
-  ### ours from E16, E18, and P0
+  ### ours from E16, E18, and P0 EXCLUDE THE ADULTS
   subset_our_obj4 <- subset(Updated_Seurat_Obj,
-                            cells = rownames(Updated_Seurat_Obj@meta.data)[which(Updated_Seurat_Obj$New_HSPC %in% c("HSPC"))])
+                            cells = rownames(Updated_Seurat_Obj@meta.data)[intersect(which(Updated_Seurat_Obj$New_HSPC %in% c("HSPC")),
+                                                                                     which(Updated_Seurat_Obj$Development != "ADULT"))])
   
   subset_our_obj4 <- FindVariableFeatures(subset_our_obj4)
   subset_our_obj4 <- ScaleData(subset_our_obj4)
@@ -1971,6 +1972,157 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
               file = paste0(outputDir, "Cluster_Down_GO_Term_Comparison_JS.xlsx"),
               sheetName = paste0("Cluster_Down_GO_Term_Comparison"),
               row.names = FALSE)
+  
+  
+  ### ours ONLY WITH THE ADULTS
+  subset_our_obj5 <- subset(Updated_Seurat_Obj,
+                            cells = rownames(Updated_Seurat_Obj@meta.data)[intersect(which(Updated_Seurat_Obj$New_HSPC %in% c("HSPC")),
+                                                                                     which(Updated_Seurat_Obj$Development == "ADULT"))])
+  
+  subset_our_obj5 <- FindVariableFeatures(subset_our_obj5)
+  subset_our_obj5 <- ScaleData(subset_our_obj5)
+  subset_our_obj5 <- RunPCA(subset_our_obj5, npcs = 15)
+  ElbowPlot(subset_our_obj5, ndims = 15, reduction = "pca")
+  subset_our_obj5 <- RunUMAP(subset_our_obj5, dims = 1:15)
+  
+  subset_our_obj5 <- FindNeighbors(subset_our_obj5, dims = 1:15)
+  subset_our_obj5 <- FindClusters(subset_our_obj5, resolution = 0.2)
+  
+  p <- DimPlot(object = subset_our_obj5, reduction = "umap", raster = TRUE,
+               group.by = "seurat_clusters",
+               pt.size = 1) +
+    ggtitle("") +
+    labs(color = "seurat_clusters") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 24, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  ggsave(paste0(outputDir, "UMAP_Ours_HSPCs_ADULT.png"), plot = p, width = 20, height = 10, dpi = 350)
+  
+  ### find all markers
+  subset_our_obj5 <- SetIdent(object = subset_our_obj5,
+                              cells = rownames(subset_our_obj5@meta.data),
+                              value = subset_our_obj5$seurat_clusters)
+  our_de_result_adult <- FindAllMarkers(subset_our_obj5,
+                                        min.pct = 0.2,
+                                        logfc.threshold = 0.2,
+                                        test.use = "wilcox")
+  
+  ### now compare DE genes between Jardine and Ours
+  similarity_mat2 <- matrix(0, nrow = length(levels(jardine_de_result$cluster)), ncol = length(levels(our_de_result_adult$cluster)))
+  rownames(similarity_mat2) <- paste0("Jardine_", levels(jardine_de_result$cluster))
+  colnames(similarity_mat2) <- paste0("Ours_", levels(our_de_result_adult$cluster))
+  
+  ### calculate common DE genes - Jaccard Similarity (adjuated pv < 0.05)
+  for(clstr1 in levels(jardine_de_result$cluster)) {
+    for(clstr2 in levels(our_de_result_adult$cluster)) {
+      jardine_target_genes <- jardine_de_result$gene[intersect(which(jardine_de_result$p_val_adj < 0.05),
+                                                               which(jardine_de_result$cluster == clstr1))]
+      jardine_target_genes <- convertHumanGeneList(jardine_target_genes)
+      our_target_genes <- our_de_result_adult$gene[intersect(which(our_de_result_adult$p_val_adj < 0.05),
+                                                             which(our_de_result_adult$cluster == clstr2))]
+      
+      similarity_mat2[paste0("Jardine_", clstr1),paste0("Ours_", clstr2)] <- length(intersect(jardine_target_genes,
+                                                                                              our_target_genes)) / length(union(jardine_target_genes,
+                                                                                                                                our_target_genes))
+    }
+  }
+  
+  ### write out the sim mat
+  write.xlsx2(data.frame(Cluster=rownames(similarity_mat2),
+                         similarity_mat2,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "Cluster_DE_Gene_Comparison_Adult_JS.xlsx"),
+              sheetName = paste0("Cluster_DE_Gene_Comparison_Adult"),
+              row.names = FALSE)
+  
+  ### now let's see the common GO terms
+  Our_Up_Go2 <- vector("list", length = length(levels(our_de_result_adult$cluster)))
+  names(Our_Up_Go2) <- levels(our_de_result_adult$cluster)
+  Our_Down_Go2 <- vector("list", length = length(levels(our_de_result_adult$cluster)))
+  names(Our_Down_Go2) <- levels(our_de_result_adult$cluster)
+  
+  ### Ours
+  for(clstr in levels(our_de_result_adult$cluster)) {
+    ### Up-Regulated
+    our_target_up_genes <- our_de_result_adult$gene[intersect(intersect(which(our_de_result_adult$p_val_adj < 0.05),
+                                                                  which(our_de_result_adult$avg_log2FC > 0)),
+                                                        which(our_de_result_adult$cluster == clstr))]
+    
+    ### get entrez ids for the genes
+    de_entrez_ids <- mapIds(org.Mm.eg.db,
+                            our_target_up_genes,
+                            "ENTREZID", "SYMBOL")
+    de_entrez_ids <- de_entrez_ids[!is.na(de_entrez_ids)]
+    
+    Our_Up_Go2[[clstr]] <- pathwayAnalysis_CP(geneList = de_entrez_ids,
+                                              org = "mouse", database = "GO",
+                                              imgPrint = FALSE)
+    
+    ### Down-Regulated
+    our_target_down_genes <- our_de_result_adult$gene[intersect(intersect(which(our_de_result_adult$p_val_adj < 0.05),
+                                                                    which(our_de_result_adult$avg_log2FC < 0)),
+                                                          which(our_de_result_adult$cluster == clstr))]
+    
+    ### get entrez ids for the genes
+    de_entrez_ids <- mapIds(org.Mm.eg.db,
+                            our_target_down_genes,
+                            "ENTREZID", "SYMBOL")
+    de_entrez_ids <- de_entrez_ids[!is.na(de_entrez_ids)]
+    
+    Our_Down_Go2[[clstr]] <- pathwayAnalysis_CP(geneList = de_entrez_ids,
+                                                org = "mouse", database = "GO",
+                                                imgPrint = FALSE)
+  }
+  
+  
+  ### Pairwise GO term comparison
+  Up_Go_Sim_Mat2 <- matrix(0, nrow = length(levels(jardine_de_result$cluster)), ncol = length(levels(our_de_result_adult$cluster)))
+  rownames(Up_Go_Sim_Mat2) <- paste0("Jardine_", levels(jardine_de_result$cluster))
+  colnames(Up_Go_Sim_Mat2) <- paste0("Ours_", levels(our_de_result_adult$cluster))
+  
+  Down_Go_Sim_Mat2 <- matrix(0, nrow = length(levels(jardine_de_result$cluster)), ncol = length(levels(our_de_result_adult$cluster)))
+  rownames(Down_Go_Sim_Mat2) <- paste0("Jardine_", levels(jardine_de_result$cluster))
+  colnames(Down_Go_Sim_Mat2) <- paste0("Ours_", levels(our_de_result_adult$cluster))
+  
+  ### calculate common GO terms - Jaccard Similarity (adjuated pv < 0.05)
+  for(clstr1 in levels(jardine_de_result$cluster)) {
+    for(clstr2 in levels(our_de_result_adult$cluster)) {
+      jardine_target_up_go <- Jardine_Up_Go[[clstr1]]$ID[which(Jardine_Up_Go[[clstr1]]$p.adjust < 0.05)]
+      jardine_target_down_go <- Jardine_Down_Go[[clstr1]]$ID[which(Jardine_Down_Go[[clstr1]]$p.adjust < 0.05)]
+      our_target_up_go <- Our_Up_Go2[[clstr2]]$ID[which(Our_Up_Go2[[clstr2]]$p.adjust < 0.05)]
+      our_target_down_go <- Our_Down_Go2[[clstr2]]$ID[which(Our_Down_Go2[[clstr2]]$p.adjust < 0.05)]
+      
+      Up_Go_Sim_Mat2[paste0("Jardine_", clstr1),paste0("Ours_", clstr2)] <- length(intersect(jardine_target_up_go,
+                                                                                            our_target_up_go)) / length(union(jardine_target_up_go,
+                                                                                                                              our_target_up_go))
+      Down_Go_Sim_Mat2[paste0("Jardine_", clstr1),paste0("Ours_", clstr2)] <- length(intersect(jardine_target_down_go,
+                                                                                              our_target_down_go)) / length(union(jardine_target_down_go,
+                                                                                                                                  our_target_down_go))
+    }
+  }
+  
+  ### write out the sim matrix
+  write.xlsx2(data.frame(Cluster=rownames(Up_Go_Sim_Mat2),
+                         Up_Go_Sim_Mat2,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "Cluster_Up_GO_Term_Comparison_Adult_JS.xlsx"),
+              sheetName = paste0("Cluster_Up_GO_Term_Comparison_Adult"),
+              row.names = FALSE)
+  write.xlsx2(data.frame(Cluster=rownames(Down_Go_Sim_Mat2),
+                         Down_Go_Sim_Mat2,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "Cluster_Down_GO_Term_Comparison_Adult_JS.xlsx"),
+              sheetName = paste0("Cluster_Down_GO_Term_Comparison_Adult"),
+              row.names = FALSE)
+  
+  
+  
+  
   
   
   
