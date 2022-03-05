@@ -2120,6 +2120,312 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
               sheetName = paste0("Cluster_Down_GO_Term_Comparison_Adult"),
               row.names = FALSE)
   
+  ### see whether Adult cells are in specific cluster
+  ### draw two UMAPs
+  
+  ### ours with HSPC
+  subset_our_obj6 <- subset(Updated_Seurat_Obj,
+                            cells = rownames(Updated_Seurat_Obj@meta.data)[which(Updated_Seurat_Obj$New_HSPC %in% c("HSPC"))])
+  
+  subset_our_obj6 <- FindVariableFeatures(subset_our_obj6)
+  subset_our_obj6 <- ScaleData(subset_our_obj6)
+  subset_our_obj6 <- RunPCA(subset_our_obj6, npcs = 15)
+  ElbowPlot(subset_our_obj6, ndims = 15, reduction = "pca")
+  subset_our_obj6 <- RunUMAP(subset_our_obj6, dims = 1:15)
+  
+  subset_our_obj6 <- FindNeighbors(subset_our_obj6, dims = 1:15)
+  subset_our_obj6 <- FindClusters(subset_our_obj6, resolution = 0.2)
+  
+  p <- DimPlot(object = subset_our_obj6, reduction = "umap", raster = TRUE,
+               group.by = "seurat_clusters",
+               pt.size = 1) +
+    ggtitle("") +
+    labs(color = "seurat_clusters") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 24, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  ggsave(paste0(outputDir, "UMAP_Ours_All_HSPCs_Clusters.png"), plot = p, width = 20, height = 10, dpi = 350)
+  
+  p <- DimPlot(object = subset_our_obj6, reduction = "umap", raster = TRUE,
+               group.by = "Development",
+               pt.size = 1) +
+    ggtitle("") +
+    labs(color = "Development") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 24, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  ggsave(paste0(outputDir, "UMAP_Ours_All_HSPCs_Development.png"), plot = p, width = 20, height = 10, dpi = 350)
+  
+  
+  ### find all markers
+  subset_our_obj6 <- SetIdent(object = subset_our_obj6,
+                              cells = rownames(subset_our_obj6@meta.data),
+                              value = subset_our_obj6$seurat_clusters)
+  our_de_result_all <- FindAllMarkers(subset_our_obj6,
+                                      min.pct = 0.2,
+                                      logfc.threshold = 0.2,
+                                      test.use = "wilcox")
+  
+  ### now compare DE genes between Jardine and Ours
+  similarity_mat3 <- matrix(0, nrow = length(levels(jardine_de_result$cluster)), ncol = length(levels(our_de_result_all$cluster)))
+  rownames(similarity_mat3) <- paste0("Jardine_", levels(jardine_de_result$cluster))
+  colnames(similarity_mat3) <- paste0("Ours_", levels(our_de_result_all$cluster))
+  
+  ### calculate common DE genes - Jaccard Similarity (adjuated pv < 0.05)
+  for(clstr1 in levels(jardine_de_result$cluster)) {
+    for(clstr2 in levels(our_de_result_all$cluster)) {
+      jardine_target_genes <- jardine_de_result$gene[intersect(which(jardine_de_result$p_val_adj < 0.05),
+                                                               which(jardine_de_result$cluster == clstr1))]
+      jardine_target_genes <- convertHumanGeneList(jardine_target_genes)
+      our_target_genes <- our_de_result_all$gene[intersect(which(our_de_result_all$p_val_adj < 0.05),
+                                                           which(our_de_result_all$cluster == clstr2))]
+      
+      similarity_mat3[paste0("Jardine_", clstr1),paste0("Ours_", clstr2)] <- length(intersect(jardine_target_genes,
+                                                                                              our_target_genes)) / length(union(jardine_target_genes,
+                                                                                                                                our_target_genes))
+    }
+  }
+  
+  ### write out the sim mat
+  write.xlsx2(data.frame(Cluster=rownames(similarity_mat3),
+                         similarity_mat3,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "Cluster_DE_Gene_Comparison_All_JS.xlsx"),
+              sheetName = paste0("Cluster_DE_Gene_Comparison_All"),
+              row.names = FALSE)
+  
+  
+  ### now let's see the common GO terms
+  Our_Up_Go3 <- vector("list", length = length(levels(our_de_result_all$cluster)))
+  names(Our_Up_Go3) <- levels(our_de_result_all$cluster)
+  Our_Down_Go3 <- vector("list", length = length(levels(our_de_result_all$cluster)))
+  names(Our_Down_Go3) <- levels(our_de_result_all$cluster)
+  
+  ### Ours
+  for(clstr in levels(our_de_result_all$cluster)) {
+    ### Up-Regulated
+    our_target_up_genes <- our_de_result_all$gene[intersect(intersect(which(our_de_result_all$p_val_adj < 0.05),
+                                                                      which(our_de_result_all$avg_log2FC > 0)),
+                                                            which(our_de_result_all$cluster == clstr))]
+    
+    ### get entrez ids for the genes
+    de_entrez_ids <- mapIds(org.Mm.eg.db,
+                            our_target_up_genes,
+                            "ENTREZID", "SYMBOL")
+    de_entrez_ids <- de_entrez_ids[!is.na(de_entrez_ids)]
+    
+    Our_Up_Go3[[clstr]] <- pathwayAnalysis_CP(geneList = de_entrez_ids,
+                                              org = "mouse", database = "GO",
+                                              imgPrint = FALSE)
+    
+    ### Down-Regulated
+    our_target_down_genes <- our_de_result_all$gene[intersect(intersect(which(our_de_result_all$p_val_adj < 0.05),
+                                                                        which(our_de_result_all$avg_log2FC < 0)),
+                                                              which(our_de_result_all$cluster == clstr))]
+    
+    ### get entrez ids for the genes
+    de_entrez_ids <- mapIds(org.Mm.eg.db,
+                            our_target_down_genes,
+                            "ENTREZID", "SYMBOL")
+    de_entrez_ids <- de_entrez_ids[!is.na(de_entrez_ids)]
+    
+    Our_Down_Go3[[clstr]] <- pathwayAnalysis_CP(geneList = de_entrez_ids,
+                                                org = "mouse", database = "GO",
+                                                imgPrint = FALSE)
+  }
+  
+  
+  ### Pairwise GO term comparison
+  Up_Go_Sim_Mat3 <- matrix(0, nrow = length(levels(jardine_de_result$cluster)), ncol = length(levels(our_de_result_all$cluster)))
+  rownames(Up_Go_Sim_Mat3) <- paste0("Jardine_", levels(jardine_de_result$cluster))
+  colnames(Up_Go_Sim_Mat3) <- paste0("Ours_", levels(our_de_result_all$cluster))
+  
+  Down_Go_Sim_Mat3 <- matrix(0, nrow = length(levels(jardine_de_result$cluster)), ncol = length(levels(our_de_result_all$cluster)))
+  rownames(Down_Go_Sim_Mat3) <- paste0("Jardine_", levels(jardine_de_result$cluster))
+  colnames(Down_Go_Sim_Mat3) <- paste0("Ours_", levels(our_de_result_all$cluster))
+  
+  ### calculate common GO terms - Jaccard Similarity (adjuated pv < 0.05)
+  for(clstr1 in levels(jardine_de_result$cluster)) {
+    for(clstr2 in levels(our_de_result_all$cluster)) {
+      jardine_target_up_go <- Jardine_Up_Go[[clstr1]]$ID[which(Jardine_Up_Go[[clstr1]]$p.adjust < 0.05)]
+      jardine_target_down_go <- Jardine_Down_Go[[clstr1]]$ID[which(Jardine_Down_Go[[clstr1]]$p.adjust < 0.05)]
+      our_target_up_go <- Our_Up_Go3[[clstr2]]$ID[which(Our_Up_Go3[[clstr2]]$p.adjust < 0.05)]
+      our_target_down_go <- Our_Down_Go3[[clstr2]]$ID[which(Our_Down_Go3[[clstr2]]$p.adjust < 0.05)]
+      
+      Up_Go_Sim_Mat3[paste0("Jardine_", clstr1),paste0("Ours_", clstr2)] <- length(intersect(jardine_target_up_go,
+                                                                                             our_target_up_go)) / length(union(jardine_target_up_go,
+                                                                                                                               our_target_up_go))
+      Down_Go_Sim_Mat3[paste0("Jardine_", clstr1),paste0("Ours_", clstr2)] <- length(intersect(jardine_target_down_go,
+                                                                                               our_target_down_go)) / length(union(jardine_target_down_go,
+                                                                                                                                   our_target_down_go))
+    }
+  }
+  
+  ### write out the sim matrix
+  write.xlsx2(data.frame(Cluster=rownames(Up_Go_Sim_Mat3),
+                         Up_Go_Sim_Mat3,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "Cluster_Up_GO_Term_Comparison_All_JS.xlsx"),
+              sheetName = paste0("Cluster_Up_GO_Term_Comparison_All"),
+              row.names = FALSE)
+  write.xlsx2(data.frame(Cluster=rownames(Down_Go_Sim_Mat3),
+                         Down_Go_Sim_Mat3,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "Cluster_Down_GO_Term_Comparison_All_JS.xlsx"),
+              sheetName = paste0("Cluster_Down_GO_Term_Comparison_All"),
+              row.names = FALSE)
+  
+  
+  ###
+  ### now combine [subset_our_obj7] and [subset_jardine_obj] - HSPC & Stroma
+  ###
+  
+  
+  #' Convert Seurat Objects from Human to Mouse
+  #' @param seu
+  #' @param ... to be passed to \code{convert_symbols_by_species}
+  #'
+  #' @return
+  #' @export
+  #'
+  #' @examples
+  convert_human_seu_to_mouse <- function(seu, ...) {
+    new_rownames <- convert_symbols_by_species(src_genes = rownames(seu), src_species = "human")
+    
+    seu_slots <- c("counts", "data", "meta.features")
+    
+    if(any(new_rownames == '')) {
+      remove_idx <- which(new_rownames == '')
+      
+      for (i in seu_slots) {
+        rownames(slot(seu@assays[["RNA"]], i)) <- new_rownames
+        slot(seu@assays[["RNA"]], i) <- slot(seu@assays[["RNA"]], i)[-remove_idx,]
+      }
+    } else {
+      for (i in seu_slots) {
+        rownames(slot(seu@assays[["RNA"]], i)) <- new_rownames
+      }
+    }
+    
+    new_rownames <- convert_symbols_by_species(src_genes = rownames(slot(seu@assays[["RNA"]], "scale.data")), src_species = "human")
+    
+    if(any(new_rownames == '')) {
+      remove_idx <- which(new_rownames == '')
+      
+      rownames(slot(seu@assays[["RNA"]], "scale.data")) <- new_rownames
+      slot(seu@assays[["RNA"]], "scale.data") <- slot(seu@assays[["RNA"]], "scale.data")[-remove_idx,]
+    } else {
+      rownames(slot(seu@assays[["RNA"]], "scale.data")) <- new_rownames
+    }
+    
+    return(seu)
+  }
+  
+  #' Convert gene symbols between mouse and human
+  #'
+  #' @param src_genes
+  #' @param src_species
+  #'
+  #' @return
+  #' @export
+  #'
+  #' @examples
+  #'
+  #' convert_symbols_by_species("RXRG", "human")
+  #'
+  #' convert_symbols_by_species("Rxrg", "mouse")
+  #'
+  convert_symbols_by_species <- function(src_genes, src_species) {
+    
+    if (src_species == "human") {
+      dest_species <- "mouse"
+      
+      dest_symbols <- src_genes %>%
+        tibble::enframe("gene_index", "HGNC.symbol") %>%
+        dplyr::left_join(human_to_mouse_homologs, by = "HGNC.symbol") %>%
+        dplyr::distinct(HGNC.symbol, .keep_all = TRUE) %>%
+        dplyr::mutate(MGI.symbol = dplyr::case_when(
+          is.na(MGI.symbol) ~ stringr::str_to_sentence(HGNC.symbol),
+          TRUE ~ MGI.symbol
+        )) %>%
+        dplyr::select(-gene_index) %>%
+        identity()
+    } else if (src_species == "mouse") {
+      dest_species <- "human"
+      
+      dest_symbols <- src_genes %>%
+        tibble::enframe("gene_index", "MGI.symbol") %>%
+        dplyr::left_join(human_to_mouse_homologs, by = "MGI.symbol") %>%
+        dplyr::distinct(MGI.symbol, .keep_all = TRUE) %>%
+        dplyr::mutate(HGNC.symbol = dplyr::case_when(
+          is.na(HGNC.symbol) ~ stringr::str_to_upper(MGI.symbol),
+          TRUE ~ HGNC.symbol
+        )) %>%
+        dplyr::select(-gene_index) %>%
+        # dplyr::mutate(HGNC.symbol = make.unique(HGNC.symbol)) %>%
+        identity()
+    }
+    
+    return(make.unique(dest_symbols[[2]]))
+  }
+  
+  ### get human_to_mouse_homologs table
+  biomaRt::listMarts(host="www.ensembl.org")
+  human_mart <- biomaRt::useMart(host="www.ensembl.org", "ENSEMBL_MART_ENSEMBL", dataset="hsapiens_gene_ensembl")
+  mouse_mart <- biomaRt::useMart(host="www.ensembl.org", "ENSEMBL_MART_ENSEMBL", dataset="mmusculus_gene_ensembl")
+
+  human_to_mouse_homologs = biomaRt::getLDS(attributes = c("hgnc_symbol","entrezgene_id","ensembl_gene_id"),
+                                          # filters = "hgnc_symbol", values = hs_genes,
+                                          # filters = "entrezgene_id", values = hs_entrez,
+                                          mart = human_mart,
+                                          attributesL = c("mgi_symbol","ensembl_gene_id","entrezgene_id"),
+                                          martL = mouse_mart)
+
+  human_to_mouse_homologs <- human_to_mouse_homologs[c("HGNC.symbol", "MGI.symbol")]
+  
+  ### ours with HSPC & Stroma
+  subset_our_obj7 <- subset(Updated_Seurat_Obj,
+                            cells = rownames(Updated_Seurat_Obj@meta.data)[which(Updated_Seurat_Obj$New_HSPC %in% c("HSPC", "Stroma"))])
+  
+  subset_our_obj7 <- FindVariableFeatures(subset_our_obj7)
+  subset_our_obj7 <- ScaleData(subset_our_obj7)
+  subset_our_obj7 <- RunPCA(subset_our_obj7, npcs = 15)
+  ElbowPlot(subset_our_obj7, ndims = 15, reduction = "pca")
+  subset_our_obj7 <- RunUMAP(subset_our_obj7, dims = 1:15)
+  
+  ### change subset_jardine_obj to mouse seurat object
+  subset_jardine_obj_mouse <- convert_human_seu_to_mouse(subset_jardine_obj)
+  
+  ### select features that are repeatedly variable across datasets for integration
+  features <- SelectIntegrationFeatures(object.list = list(subset_our_obj7, subset_jardine_obj_mouse))
+  
+  ### find anchors between the two objects
+  hspc.anchors <- FindIntegrationAnchors(object.list = list(subset_our_obj7, subset_jardine_obj_mouse), anchor.features = features)
+  
+  ### combined object
+  hspc.combined <- IntegrateData(anchorset = hspc.anchors)
+  
+  ### set the default assay
+  DefaultAssay(hspc.combined) <- "integrated"
+  
+  ### preprocess the combined data
+  hspc.combined <- ScaleData(hspc.combined, verbose = FALSE)
+  hspc.combined <- RunPCA(hspc.combined, npcs = 30, verbose = FALSE)
+  hspc.combined <- RunUMAP(hspc.combined, reduction = "pca", dims = 1:30)
+  hspc.combined <- FindNeighbors(hspc.combined, reduction = "pca", dims = 1:30)
+  hspc.combined <- FindClusters(hspc.combined, resolution = 0.5)
+  
+  
   
   
   
