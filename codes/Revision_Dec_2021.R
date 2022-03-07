@@ -2406,6 +2406,40 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   ### change subset_jardine_obj to mouse seurat object
   subset_jardine_obj_mouse <- convert_human_seu_to_mouse(subset_jardine_obj)
   
+  
+  ### just combine two objects
+  combined_obj <- merge(subset_our_obj7, subset_jardine_obj_mouse)
+  
+  ### preprocess
+  combined_obj <- FindVariableFeatures(combined_obj)
+  combined_obj <- ScaleData(combined_obj)
+  combined_obj <- RunPCA(combined_obj, npcs = 15)
+  ElbowPlot(combined_obj, ndims = 15, reduction = "pca")
+  combined_obj <- RunUMAP(combined_obj, dims = 1:15)
+  
+  ### cell annotation
+  combined_obj$Combined_Anno <- combined_obj$New_Anno
+  combined_obj$Combined_Anno[which(is.na(combined_obj$New_Anno))] <- combined_obj$broad_fig1_cell.labels[which(is.na(combined_obj$New_Anno))]
+  combined_obj$Combined_Anno[which(combined_obj$Combined_Anno == "HSC/MPP and pro")] <- "JARDINE_HSPC"
+  combined_obj$Combined_Anno[which(combined_obj$Combined_Anno == "stroma")] <- "JARDINE_Stroma"
+  
+  ### UMAP
+  p <- DimPlot(object = combined_obj, reduction = "umap", raster = TRUE,
+               group.by = "Combined_Anno",
+               pt.size = 1) +
+    ggtitle(paste0("Combined UMAP")) +
+    labs(color = "Annotation") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 24, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  ggsave(paste0(outputDir, "UMAP_Just_Combined.png"), plot = p, width = 20, height = 10, dpi = 350)
+  
+  
   ### select features that are repeatedly variable across datasets for integration
   features <- SelectIntegrationFeatures(object.list = list(subset_our_obj7, subset_jardine_obj_mouse))
   
@@ -2421,12 +2455,50 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   ### preprocess the combined data
   hspc.combined <- ScaleData(hspc.combined, verbose = FALSE)
   hspc.combined <- RunPCA(hspc.combined, npcs = 30, verbose = FALSE)
+  ElbowPlot(hspc.combined, ndims = 15, reduction = "pca")
   hspc.combined <- RunUMAP(hspc.combined, reduction = "pca", dims = 1:30)
-  hspc.combined <- FindNeighbors(hspc.combined, reduction = "pca", dims = 1:30)
+  hspc.combined <- FindNeighbors(hspc.combined, reduction = "pca", dims = 1:15)
   hspc.combined <- FindClusters(hspc.combined, resolution = 0.5)
   
+  ### cell annotation
+  hspc.combined$Combined_Anno <- hspc.combined$New_Anno
+  hspc.combined$Combined_Anno[which(is.na(hspc.combined$New_Anno))] <- hspc.combined$broad_fig1_cell.labels[which(is.na(hspc.combined$New_Anno))]
+  hspc.combined$Combined_Anno[which(hspc.combined$Combined_Anno == "HSC/MPP and pro")] <- "JARDINE_HSPC"
+  hspc.combined$Combined_Anno[which(hspc.combined$Combined_Anno == "stroma")] <- "JARDINE_Stroma"
   
+  ### UMAP
+  p <- DimPlot(object = hspc.combined, reduction = "umap", raster = TRUE,
+               group.by = "Combined_Anno",
+               pt.size = 1) +
+    ggtitle(paste0("Anchor Combined UMAP")) +
+    labs(color = "Annotation") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 24, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  ggsave(paste0(outputDir, "UMAP_Anchor_Combined.png"), plot = p, width = 20, height = 10, dpi = 350)
   
+  ### separate each
+  p <- DimPlot(object = hspc.combined, reduction = "umap", raster = TRUE,
+               group.by = "Combined_Anno", split.by = "Combined_Anno",
+               pt.size = 1, ncol = 3) +
+    ggtitle(paste0("Anchor Combined UMAP")) +
+    labs(color = "Annotation") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 24, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  ggsave(paste0(outputDir, "UMAP_Anchor_Combined_Split.png"), plot = p, width = 25, height = 20, dpi = 350)
+  
+  ### how about looking at HSPC only?
   
   
   
