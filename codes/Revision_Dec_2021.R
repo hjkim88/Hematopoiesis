@@ -2499,7 +2499,103 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   ggsave(paste0(outputDir, "UMAP_Anchor_Combined_Split.png"), plot = p, width = 25, height = 20, dpi = 350)
   
   ### how about looking at HSPC only?
+  hspc.combined_no_stroma <- subset(hspc.combined,
+                                    cells = rownames(hspc.combined@meta.data)[which(hspc.combined$Combined_Anno %in% c("ADULT_HSPC",
+                                                                                                                       "E16_HSPC",
+                                                                                                                       "E18_HSPC",
+                                                                                                                       "P0_HSPC",
+                                                                                                                       "JARDINE_HSPC"))])
   
+  ### preprocess the combined data
+  hspc.combined_no_stroma <- ScaleData(hspc.combined_no_stroma, verbose = FALSE)
+  hspc.combined_no_stroma <- RunPCA(hspc.combined_no_stroma, npcs = 30, verbose = FALSE)
+  ElbowPlot(hspc.combined_no_stroma, ndims = 15, reduction = "pca")
+  hspc.combined_no_stroma <- RunUMAP(hspc.combined_no_stroma, reduction = "pca", dims = 1:30)
+  
+  ### UMAP
+  p <- DimPlot(object = hspc.combined_no_stroma, reduction = "umap", raster = TRUE,
+               group.by = "Combined_Anno",
+               pt.size = 1) +
+    ggtitle(paste0("Anchor Combined UMAP")) +
+    labs(color = "Annotation") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 24, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  ggsave(paste0(outputDir, "UMAP_Anchor_Combined_no_stroma.png"), plot = p, width = 20, height = 10, dpi = 350)
+  
+  
+  ###
+  ### Load GSM4645153 data (E16.5 fetal liver HSCs)
+  ### Run hscScore
+  ### Draw a violin plot similar to Fig4F
+  ###
+  
+  ### load the cellranger outputs
+  gsm4645153.data <- Read10X(data.dir = "./data/GSM4645153/")
+  
+  ### create a Seurat object
+  ### min.cells : include genes detected in at least this many cells
+  ### min.features : include cells where at least this many features are detected
+  gsm4645153_Seurat_Obj <- CreateSeuratObject(counts = gsm4645153.data,
+                                              project = "gsm4645153",
+                                              min.cells = 3,
+                                              min.features = 200)
+  
+  ### MT percentage (Human: ^MT-, Mouse: ^mt- or ^Mt-)
+  gsm4645153_Seurat_Obj[["percent.mt"]] <- PercentageFeatureSet(gsm4645153_Seurat_Obj, pattern = "^mt-")
+  
+  ### Visualize QC metrics as a violin plot
+  VlnPlot(gsm4645153_Seurat_Obj, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+  plot(density(gsm4645153_Seurat_Obj@meta.data$nFeature_RNA))
+  plot(density(gsm4645153_Seurat_Obj@meta.data$nCount_RNA))
+  plot(density(gsm4645153_Seurat_Obj@meta.data$percent.mt))
+  
+  ### Filter cells that have unique feature counts over 7000 or less than 2000
+  ### Filter cells that have RNA mocule # > 40000
+  ### Filter cells that have > 10% mitochondrial counts
+  gsm4645153_Seurat_Obj <- subset(gsm4645153_Seurat_Obj, subset = nFeature_RNA > 2000 & nFeature_RNA < 7000 & nCount_RNA < 40000 & percent.mt < 10)
+  
+  ### normalization
+  gsm4645153_Seurat_Obj <- NormalizeData(gsm4645153_Seurat_Obj,
+                                         normalization.method = "LogNormalize", scale.factor = 10000)
+  
+  ### Cell cycle score (will be used later for regression out)
+  gsm4645153_Seurat_Obj <- CellCycleScoring(object = gsm4645153_Seurat_Obj,
+                                            g2m.features = convertHumanGeneList(cc.genes$g2m.genes),
+                                            s.features = convertHumanGeneList(cc.genes$s.genes))
+  
+  ### find variable genes
+  gsm4645153_Seurat_Obj <- FindVariableFeatures(gsm4645153_Seurat_Obj,
+                                                selection.method = "vst", nfeatures = 2000)
+  
+  ### scaling
+  gsm4645153_Seurat_Obj <- ScaleData(gsm4645153_Seurat_Obj,
+                                     vars.to.regress = c("percent.mt", "S.Score", "G2M.Score"))
+  
+  ### PCA
+  gsm4645153_Seurat_Obj <- RunPCA(gsm4645153_Seurat_Obj,
+                                  features = VariableFeatures(object = gsm4645153_Seurat_Obj), npcs = 15)
+  ElbowPlot(gsm4645153_Seurat_Obj, ndims = 15, reduction = "pca")
+  
+  ### UMAP
+  gsm4645153_Seurat_Obj <- RunUMAP(gsm4645153_Seurat_Obj, dims = 1:15)
+  
+  ### export out the count matrix (rows = cells, columns = genes)
+  ### then run python codes to perform hscscore on the data
+  temp <- as.matrix(gsm4645153_Seurat_Obj@assays$RNA@counts)
+  write.table(t(temp),
+              file = "./data/GSM4645153/Zenodo_data/GSM4645153.tsv")
+  
+  
+  ### the hscscore has run with 'Run_hscscore.py'
+  ### now load the output and draw a violin plot with the result
+  hscscore_result <- read.csv("./data/GSM4645153/Zenodo_data/GSM4645153_hscScore.csv",
+                              stringsAsFactors = FALSE, check.names = FALSE)
   
   
   
