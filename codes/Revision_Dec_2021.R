@@ -2585,6 +2585,10 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   ### UMAP
   gsm4645153_Seurat_Obj <- RunUMAP(gsm4645153_Seurat_Obj, dims = 1:15)
   
+  ### clustering
+  gsm4645153_Seurat_Obj <- FindNeighbors(gsm4645153_Seurat_Obj, dims = 1:15)
+  gsm4645153_Seurat_Obj <- FindClusters(gsm4645153_Seurat_Obj, resolution = 0.2)
+  
   ### export out the count matrix (rows = cells, columns = genes)
   ### then run python codes to perform hscscore on the data
   temp <- as.matrix(gsm4645153_Seurat_Obj@assays$RNA@counts)
@@ -2596,6 +2600,106 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   ### now load the output and draw a violin plot with the result
   hscscore_result <- read.csv("./data/GSM4645153/Zenodo_data/GSM4645153_hscScore.csv",
                               stringsAsFactors = FALSE, check.names = FALSE)
+  
+  ### annotate the cells
+  gsm4645153_Seurat_Obj$hscScore <- NA
+  gsm4645153_Seurat_Obj@meta.data[hscscore_result$Barcode,"hscScore"] <- hscscore_result$hscScore
+  
+  ### clustering UMAP & violin plot
+  p <- DimPlot(object = gsm4645153_Seurat_Obj, reduction = "umap",
+               group.by = "RNA_snn_res.0.2",
+               pt.size = 3) +
+    ggtitle("") +
+    labs(color="Clusters") +
+    theme_classic(base_size = 64) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 48),
+          axis.text.x = element_text(size = 48),
+          axis.title.x = element_text(size = 48),
+          axis.title.y = element_text(size = 48),
+          legend.title = element_text(size = 48),
+          legend.text = element_text(size = 48)) +
+    guides(colour = guide_legend(override.aes = list(size=10)))
+  p[[1]]$layers[[1]]$aes_params$alpha <- 1
+  ggsave(paste0(outputDir, "UMAP_GSM4645153_Clusters.png"), plot = p, width = 20, height = 10, dpi = 350)
+  
+  ### violin plot
+  gsm4645153_Seurat_Obj <- SetIdent(object = gsm4645153_Seurat_Obj,
+                                    cells = rownames(gsm4645153_Seurat_Obj@meta.data),
+                                    value = gsm4645153_Seurat_Obj$RNA_snn_res.0.2)
+  p <- VlnPlot(gsm4645153_Seurat_Obj, features = c("hscScore"),
+               pt.size = 0) +
+    ggtitle("hscScore") +
+    xlab("Clusters") +
+    # stat_summary(fun=mean, geom="point", size=3, color="black") +
+    theme_classic(base_size = 40) +
+    theme(legend.key.size = unit(1, 'cm'),
+          legend.position = "right",
+          legend.title = element_text(angle = 0, size = 30, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"),
+          legend.text = element_text(angle = 0, size = 25, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"),
+          plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 35, color = "black", face = "bold"),
+          plot.subtitle = element_text(hjust = 0.5, vjust = 0.5, size = 25, color = "black", face = "bold"),
+          axis.title = element_text(angle = 0, size = 30, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"),
+          axis.text = element_text(angle = 0, size = 25, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"))
+  
+  ### save the violin plot
+  ggsave(file = paste0(outputDir, "Violin_GSM4645153_hscScores_Clusters.png"), plot = p, width = 15, height = 10, dpi = 350)
+  
+  
+  ### load full magee data
+  ### It could have been just using cellranger aggr
+  ### but they provided cellranger outputs separately for each sample
+  ### and didn't provide .h5 info file, so it's impossible to
+  ### integrate them using cellranger aggr.
+  ### so I'm going to just load each into R and combine them
+  
+  ### first we need to create directory for each GSM sample
+  f <- setdiff(list.files(path = "./data/GSE128761_RAW/", pattern = "^GSM", include.dirs = FALSE),
+               list.dirs(path = "./data/GSE128761_RAW/", full.names = FALSE, recursive = FALSE))
+  GSM_prefix <- unique(sapply(f, function(x) strsplit(x, "_", fixed = TRUE)[[1]][1]))
+  
+  for(prefix in GSM_prefix) {
+    dir.create(path = paste0("./data/GSE128761_RAW/", prefix))
+    
+    f2 <- setdiff(list.files(path = "./data/GSE128761_RAW/", pattern = paste0("^", prefix), include.dirs = FALSE),
+                  list.dirs(path = "./data/GSE128761_RAW/", full.names = FALSE, recursive = FALSE))
+    
+    for(file in f2) {
+      suffix <- strsplit(file, split = "_", fixed = TRUE)[[1]]
+      suffix <- suffix[length(suffix)]
+      file.rename(from = paste0("./data/GSE128761_RAW/", file),
+                  to = paste0("./data/GSE128761_RAW/", prefix, "/", suffix))
+      
+    }
+  }
+  
+  ### now it's time to load the data separately
+  f <- list.dirs(path = "./data/GSE128761_RAW/", full.names = FALSE, recursive = FALSE)
+  for(file in f) {
+    ### load the cellranger outputs
+    gsm4645153.data <- Read10X(data.dir = "./data/GSM4645153/")
+    
+    ### create a Seurat object
+    ### min.cells : include genes detected in at least this many cells
+    ### min.features : include cells where at least this many features are detected
+    gsm4645153_Seurat_Obj <- CreateSeuratObject(counts = gsm4645153.data,
+                                                project = "gsm4645153",
+                                                min.cells = 3,
+                                                min.features = 200)
+  }
+  
+  
+  ###
+  ### Combine all our data, all Jardine data, & all Magee data
+  ### and run CCA on those to see how they cluster on UMAP
+  ### all our data: Updated_Seurat_Obj
+  ### all Jardine data: jardine_seurat2
+  ### all magee data: 
+  
+  
+  
+  
+  
+  
   
   
   
