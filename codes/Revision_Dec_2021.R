@@ -116,8 +116,8 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   
   ### Cell cycle score (will be used later for regression out)
   Updated_Seurat_Obj <- CellCycleScoring(object = Updated_Seurat_Obj,
-                                         g2m.features = cc.genes$g2m.genes,
-                                         s.features = cc.genes$s.genes)
+                                         g2m.features = convertHumanGeneList(cc.genes$g2m.genes),
+                                         s.features = convertHumanGeneList(cc.genes$s.genes))
   
   ### find variable genes
   Updated_Seurat_Obj <- FindVariableFeatures(Updated_Seurat_Obj,
@@ -125,7 +125,7 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   
   ### scaling
   Updated_Seurat_Obj <- ScaleData(Updated_Seurat_Obj,
-                                  vars.to.regress = c("nCount_RNA", "percent.mt", "S.Score", "G2M.Score"))
+                                  vars.to.regress = c("percent.mt", "S.Score", "G2M.Score"))
   
   ### PCA
   Updated_Seurat_Obj <- RunPCA(Updated_Seurat_Obj,
@@ -2672,34 +2672,349 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
     }
   }
   
+  for(prefix in GSM_prefix) {
+    f3 <- list.files(paste0("./data/GSE128761_RAW/", prefix), pattern = "^hpc.")
+    if(length(f3) > 0) {
+      for(file in f3) {
+        file2 <- substring(file, 5)
+        file.rename(from = paste0("./data/GSE128761_RAW/", prefix, "/", file),
+                    to = paste0("./data/GSE128761_RAW/", prefix, "/", file2))
+      }
+    }
+    
+    file.rename(from = paste0("./data/GSE128761_RAW/", prefix, "/genes.tsv.gz"),
+                to = paste0("./data/GSE128761_RAW/", prefix, "/features.tsv.gz"))
+  }
+  
   ### now it's time to load the data separately
   f <- list.dirs(path = "./data/GSE128761_RAW/", full.names = FALSE, recursive = FALSE)
+  obj_list <- vector("list", length = length(f))
+  names(obj_list) <- f
   for(file in f) {
     ### load the cellranger outputs
-    gsm4645153.data <- Read10X(data.dir = "./data/GSM4645153/")
+    cr.data <- Read10X(data.dir = paste0("./data/GSE128761_RAW/", file, "/"))
     
     ### create a Seurat object
     ### min.cells : include genes detected in at least this many cells
     ### min.features : include cells where at least this many features are detected
-    gsm4645153_Seurat_Obj <- CreateSeuratObject(counts = gsm4645153.data,
-                                                project = "gsm4645153",
-                                                min.cells = 3,
-                                                min.features = 200)
+    obj_list[[file]] <- CreateSeuratObject(counts = cr.data,
+                                           project = "GSE128761",
+                                           min.cells = 3,
+                                           min.features = 200)
   }
   
+  ### combine magee data
+  obj_list[[1]]$library <- names(obj_list)[1]
+  magee_seurat <- obj_list[[1]]
+  for(i in 2:length(obj_list)) {
+    obj_list[[i]]$library <- names(obj_list)[i]
+    magee_seurat <- merge(magee_seurat, obj_list[[i]])
+  }
+  
+  ### check the number of cells are consistent
+  print(identical(sum(sapply(obj_list, function(x) nrow(x@meta.data))), nrow(magee_seurat@meta.data)))
+  
+  ### normalization
+  magee_seurat <- NormalizeData(magee_seurat,
+                                normalization.method = "LogNormalize", scale.factor = 10000)
+  
+  ### Cell cycle score (will be used later for regression out)
+  magee_seurat <- CellCycleScoring(object = magee_seurat,
+                                   g2m.features = convertHumanGeneList(cc.genes$g2m.genes),
+                                   s.features = convertHumanGeneList(cc.genes$s.genes))
+  
+  ### find variable genes
+  magee_seurat <- FindVariableFeatures(magee_seurat,
+                                       selection.method = "vst", nfeatures = 2000)
+  
+  ### scaling
+  magee_seurat <- ScaleData(magee_seurat,
+                            vars.to.regress = c("percent.mt", "S.Score", "G2M.Score"))
+  
+  ### PCA
+  magee_seurat <- RunPCA(magee_seurat,
+                         features = VariableFeatures(object = magee_seurat),
+                         npcs = 50)
+  
+  ### UMAP
+  magee_seurat <- RunUMAP(magee_seurat, dims = 1:50)
+  
+  
+  ### preprocess the jardine data
+  
+  ### normalization
+  jardine_seurat2 <- NormalizeData(jardine_seurat2,
+                                   normalization.method = "LogNormalize", scale.factor = 10000)
+  
+  ### Cell cycle score (will be used later for regression out)
+  jardine_seurat2 <- CellCycleScoring(object = jardine_seurat2,
+                                      g2m.features = cc.genes$g2m.genes,
+                                      s.features = cc.genes$s.genes)
+  
+  ### find variable genes
+  jardine_seurat2 <- FindVariableFeatures(jardine_seurat2,
+                                          selection.method = "vst", nfeatures = 2000)
+  
+  ### scaling
+  jardine_seurat2 <- ScaleData(jardine_seurat2,
+                               vars.to.regress = c("percent.mt", "S.Score", "G2M.Score"))
+  
+  ### PCA
+  jardine_seurat2 <- RunPCA(jardine_seurat2,
+                            features = VariableFeatures(object = jardine_seurat2),
+                            npcs = 50)
+  
+  ### UMAP
+  jardine_seurat2 <- RunUMAP(jardine_seurat2, dims = 1:50)
+  
+  ### change jardine_seurat2 to mouse seurat object
+  jardine_obj_mouse <- convert_human_seu_to_mouse(jardine_seurat2)
+  
+  ### save the 3 seurat objects
+  save(list = c("Updated_Seurat_Obj", "jardine_obj_mouse", "magee_seurat"),
+       file = "Z:/ResearchHome/SharedResources/Immunoinformatics/hkim8/03_15_22_Three_Combining.RData")
   
   ###
   ### Combine all our data, all Jardine data, & all Magee data
   ### and run CCA on those to see how they cluster on UMAP
   ### all our data: Updated_Seurat_Obj
-  ### all Jardine data: jardine_seurat2
-  ### all magee data: 
+  ### all Jardine data: jardine_obj_mouse
+  ### all magee data: magee_seurat
+  ###
+  
+  ### select features that are repeatedly variable across datasets for integration
+  features <- SelectIntegrationFeatures(object.list = list(Updated_Seurat_Obj, jardine_obj_mouse, magee_seurat))
+  
+  ### find anchors between the two objects
+  total.anchors <- FindIntegrationAnchors(object.list = list(Updated_Seurat_Obj, jardine_obj_mouse, magee_seurat), anchor.features = features)
+  
+  ### combined object
+  total.combined <- IntegrateData(anchorset = total.anchors)
+  
+  ### set the default assay
+  DefaultAssay(total.combined) <- "integrated"
+  
+  ### anootate the magee data
+  total.combined$magee_anno <- NA
+  total.combined$magee_anno[which(total.combined$library == "GSM3684542")] <- "HSC_E16_5"
+  total.combined$magee_anno[which(total.combined$library == "GSM3684543")] <- "HSC_P7"
+  total.combined$magee_anno[which(total.combined$library == "GSM3684544")] <- "HSC_P14"
+  total.combined$magee_anno[which(total.combined$library == "GSM3684545")] <- "HSC_Adult"
+  total.combined$magee_anno[which(total.combined$library == "GSM3684546")] <- "HPC_E16_5"
+  total.combined$magee_anno[which(total.combined$library == "GSM3684547")] <- "HPC_P7"
+  total.combined$magee_anno[which(total.combined$library == "GSM3684548")] <- "HPC_P14"
+  total.combined$magee_anno[which(total.combined$library == "GSM3684549")] <- "HPC_Adult"
+  total.combined$magee_anno[which(total.combined$library == "GSM3684550")] <- "E16_5_WT"
+  total.combined$magee_anno[which(total.combined$library == "GSM3684551")] <- "P0_HPC_BM"
+  total.combined$magee_anno[which(total.combined$library == "GSM3684552")] <- "P0_HPC_Liver"
+  total.combined$magee_anno[which(total.combined$library == "GSM3684553")] <- "P7_WT_HPC"
+  total.combined$magee_anno[which(total.combined$library == "GSM3684554")] <- "WT_HPC"
+  total.combined$magee_anno[which(total.combined$library == "GSM4645153")] <- "E16_5_HSC_Liver"
+  total.combined$magee_anno[which(total.combined$library == "GSM4645154")] <- "P0_HSC_Liver"
+  total.combined$magee_anno[which(total.combined$library == "GSM4645155")] <- "P0_HSC_BM"
+  total.combined$magee_anno[which(total.combined$library == "GSM4645156")] <- "P7_HSC_BM"
   
   
+  ### merge the annotations
+  total.combined$New_Anno[which(!is.na(total.combined$New_Anno))] <- paste0("OURS_", total.combined$New_Anno[which(!is.na(total.combined$New_Anno))])
+  total.combined$broad_fig1_cell.labels[which(!is.na(total.combined$broad_fig1_cell.labels))] <- paste0("JARDINE_", total.combined$broad_fig1_cell.labels[which(!is.na(total.combined$broad_fig1_cell.labels))])
+  total.combined$magee_anno[which(!is.na(total.combined$magee_anno))] <- paste0("MAGEE_", total.combined$magee_anno[which(!is.na(total.combined$magee_anno))])
+  
+  total.combined$Final_Anno <- NA
+  total.combined$Final_Anno[which(is.na(total.combined$Final_Anno))] <- total.combined$New_Anno[which(is.na(total.combined$Final_Anno))]
+  total.combined$Final_Anno[which(is.na(total.combined$Final_Anno))] <- total.combined$broad_fig1_cell.labels[which(is.na(total.combined$Final_Anno))]
+  total.combined$Final_Anno[which(is.na(total.combined$Final_Anno))] <- total.combined$magee_anno[which(is.na(total.combined$Final_Anno))]
   
   
+  ### the original one is too big, so RunUMAP can't be run
+  print(paste("Ours Cell # =", length(which(!is.na(total.combined$New_Anno)))))
+  print(paste("Jardine Cell # =", length(which(!is.na(total.combined$broad_fig1_cell.labels)))))
+  print(paste("Magee Cell # =", length(which(!is.na(total.combined$magee_anno)))))
+  
+  ### let's do down-sampling
+  ### the minimum cell # = 177
+  print(sapply(unique(total.combined$Final_Anno), function(x) {
+    length(which(total.combined$Final_Anno == x))
+  }))
+  print(min(sapply(unique(total.combined$Final_Anno), function(x) {
+    length(which(total.combined$Final_Anno == x))
+  })))
+  random_idx <- NULL
+  set.seed(1234)
+  for(anno in unique(total.combined$Final_Anno)) {
+    random_idx <- c(random_idx,
+                    sample(which(total.combined$Final_Anno == anno), min(500, length(which(total.combined$Final_Anno == anno)))))
+  }
+  total.downsampled <- subset(total.combined,
+                              cells = rownames(total.combined@meta.data)[random_idx])
+  print(sapply(unique(total.downsampled$Final_Anno), function(x) {
+    length(which(total.downsampled$Final_Anno == x))
+  }))
   
   
+  ### preprocess the combined data
+  total.downsampled <- ScaleData(total.downsampled, verbose = FALSE)
+  total.downsampled <- RunPCA(total.downsampled, npcs = 20, verbose = FALSE)
+  ElbowPlot(total.downsampled, ndims = 20, reduction = "pca")
+  total.downsampled <- RunUMAP(total.downsampled, reduction = "pca", dims = 1:20)
+  
+  ### UMAP
+  p <- DimPlot(object = total.downsampled, reduction = "umap", raster = TRUE,
+               group.by = "Final_Anno",
+               pt.size = 1) +
+    ggtitle(paste0("Anchor Combined UMAP")) +
+    labs(color = "Annotation") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 12, color = "black", face = "bold"),
+          legend.text = element_text(size = 10, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  ggsave(paste0(outputDir, "UMAP_Anchor_Combined_All3.png"), plot = p, width = 25, height = 10, dpi = 350)
+  
+  ### labeling each dataset
+  total.downsampled$Dataset <- NA
+  total.downsampled$Dataset[grep("OURS", total.downsampled$Final_Anno, fixed = TRUE)] <- "OURS"
+  total.downsampled$Dataset[grep("JARDINE", total.downsampled$Final_Anno, fixed = TRUE)] <- "JARDINE"
+  total.downsampled$Dataset[grep("MAGEE", total.downsampled$Final_Anno, fixed = TRUE)] <- "MAGEE"
+  
+  ### UMAP
+  p <- DimPlot(object = total.downsampled, reduction = "umap", raster = TRUE,
+               group.by = "Dataset",
+               pt.size = 1) +
+    ggtitle(paste0("Anchor Combined UMAP")) +
+    labs(color = "Data") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 20, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  ggsave(paste0(outputDir, "UMAP_Anchor_Combined_All3_Data.png"), plot = p, width = 20, height = 10, dpi = 350)
+  
+  ### Interesting UMAP1
+  p <- DimPlot(object = total.downsampled, reduction = "umap", raster = TRUE,
+               group.by = "Final_Anno",
+               pt.size = 1,
+               cols = c("JARDINE_HSC/MPP and pro" = "red",
+                        "OURS_ADULT_HSPC" = "purple",
+                        "OURS_E16_HSPC" = "green",
+                        "OURS_E18_HSPC" = "skyblue",
+                        "OURS_P0_HSPC" = "blue",
+                        "MAGEE_HPC_E16_5" = "orange",
+                        "MAGEE_HPC_P7" = "pink",
+                        "MAGEE_HPC_Adult" = "violet",
+                        "MAGEE_P0_HPC_Liver" = "black",
+                        "MAGEE_P0_HPC_BM" = "yellow")) +
+    ggtitle(paste0("Anchor Combined UMAP")) +
+    labs(color = "Annotation") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 20, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  ggsave(paste0(outputDir, "UMAP_Anchor_Combined_All3_Interesting1.png"), plot = p, width = 20, height = 10, dpi = 350)
+  
+  ### Interesting UMAP2
+  p <- DimPlot(object = total.downsampled, reduction = "umap", raster = TRUE,
+               group.by = "Final_Anno",
+               pt.size = 1,
+               cols = c("OURS_ADULT_Other_Heme" = "orange",
+                        "OURS_ADULT_HSPC" = "purple",
+                        "OURS_ADULT_Stroma" = "green",
+                        "MAGEE_HPC_Adult" = "violet",
+                        "JARDINE_stroma" = "blue",
+                        "JARDINE_HSC/MPP and pro" = "red")) +
+    ggtitle(paste0("Anchor Combined UMAP")) +
+    labs(color = "Annotation") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 20, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  ggsave(paste0(outputDir, "UMAP_Anchor_Combined_All3_Interesting2.png"), plot = p, width = 20, height = 10, dpi = 350)
+  
+  ### Interesting UMAP3
+  p <- DimPlot(object = total.downsampled, reduction = "umap", raster = TRUE,
+               group.by = "Final_Anno",
+               pt.size = 1,
+               cols = c("JARDINE_HSC/MPP and pro" = "red",
+                        "MAGEE_P0_HSC_Liver" = "purple",
+                        "MAGEE_P0_HSC_BM" = "orange",
+                        "OURS_P0_Other_Heme" = "green",
+                        "OURS_P0_Stroma" = "skyblue",
+                        "OURS_P0_HSPC" = "blue",
+                        "MAGEE_P0_HPC_Liver" = "black",
+                        "MAGEE_P0_HPC_BM" = "yellow")) +
+    ggtitle(paste0("Anchor Combined UMAP")) +
+    labs(color = "Annotation") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 20, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  ggsave(paste0(outputDir, "UMAP_Anchor_Combined_All3_Interesting3.png"), plot = p, width = 20, height = 10, dpi = 350)
+  
+  ### Interesting UMAP4
+  p <- DimPlot(object = total.downsampled, reduction = "umap", raster = TRUE,
+               group.by = "Final_Anno",
+               pt.size = 1,
+               cols = c("JARDINE_HSC/MPP and pro" = "red",
+                        "OURS_E16_Other_Heme" = "purple",
+                        "OURS_E16_HSPC" = "green",
+                        "OURS_E16_Stroma" = "skyblue",
+                        "JARDINE_stroma" = "blue",
+                        "MAGEE_HPC_E16_5" = "orange",
+                        "MAGEE_HSC_E16_5" = "pink",
+                        "MAGEE_E16_5_HSC_Liver" = "violet")) +
+    ggtitle(paste0("Anchor Combined UMAP")) +
+    labs(color = "Annotation") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 20, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  ggsave(paste0(outputDir, "UMAP_Anchor_Combined_All3_Interesting4.png"), plot = p, width = 20, height = 10, dpi = 350)
+  
+  ### Interesting UMAP5
+  p <- DimPlot(object = total.downsampled, reduction = "umap", raster = TRUE,
+               group.by = "Final_Anno",
+               pt.size = 1,
+               cols = c("JARDINE_HSC/MPP and pro" = "red",
+                        "OURS_E18_Other_Heme" = "purple",
+                        "OURS_E18_Stroma" = "green",
+                        "OURS_E18_HSPC" = "skyblue",
+                        "JARDINE_stroma" = "blue",
+                        "MAGEE_HPC_P7" = "orange",
+                        "MAGEE_HSC_P7" = "pink",
+                        "MAGEE_P7_HSC_BM" = "violet")) +
+    ggtitle(paste0("Anchor Combined UMAP")) +
+    labs(color = "Annotation") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 20, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  ggsave(paste0(outputDir, "UMAP_Anchor_Combined_All3_Interesting5.png"), plot = p, width = 20, height = 10, dpi = 350)
   
   
   
