@@ -18,6 +18,11 @@
 #     Wenjun_Heme2_2    : P21 Heme
 #     Wenjun_Stromal1_2 : P28 Stroma
 #     Wenjun_Stromal2_2 : P21 Stroma
+#     TDH007            : P0 Heme
+#     TDH008_1094045    : P0 Stroma (Trent 1st)
+#     TDH008_1106032    : P0 Stroma (Trent 2nd)
+#     TDH001            : ADULT Heme
+#     TDH002            : ADULT Stroma
 #
 #   Instruction
 #               1. Source("Wenjun_Data_Preprocess.R")
