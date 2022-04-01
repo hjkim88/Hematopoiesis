@@ -244,18 +244,15 @@ wenjun_preprocess <- function(cellranger_result_dir="Z:/ResearchHome/SharedResou
   
   ### PCA
   Wenjun_Seurat_Obj <- RunPCA(Wenjun_Seurat_Obj,
-                              features = VariableFeatures(object = Wenjun_Seurat_Obj), npcs = 15)
-  ElbowPlot(Wenjun_Seurat_Obj, ndims = 15, reduction = "pca")
+                              features = VariableFeatures(object = Wenjun_Seurat_Obj), npcs = 20)
+  ElbowPlot(Wenjun_Seurat_Obj, ndims = 20, reduction = "pca")
   
   ### UMAP
-  Wenjun_Seurat_Obj <- RunUMAP(Wenjun_Seurat_Obj, dims = 1:15)
+  Wenjun_Seurat_Obj <- RunUMAP(Wenjun_Seurat_Obj, dims = 1:20)
   
   ### clustering
-  Wenjun_Seurat_Obj <- FindNeighbors(Wenjun_Seurat_Obj, dims = 1:15)
-  Wenjun_Seurat_Obj <- FindClusters(Wenjun_Seurat_Obj, resolution = 0.1)
-  
-  ### save the Seurat object as RDS file
-  saveRDS(Wenjun_Seurat_Obj, file = output_obj_path)
+  Wenjun_Seurat_Obj <- FindNeighbors(Wenjun_Seurat_Obj, dims = 1:20)
+  Wenjun_Seurat_Obj <- FindClusters(Wenjun_Seurat_Obj, resolution = 0.4)
   
   ### factorize some columns
   Wenjun_Seurat_Obj$Development <- factor(Wenjun_Seurat_Obj$Development, levels = c("P0", "P6", "P14", "P21", "P28", "ADULT"))
@@ -267,6 +264,9 @@ wenjun_preprocess <- function(cellranger_result_dir="Z:/ResearchHome/SharedResou
                                                "P28_Heme", "P28_Stroma",
                                                "ADULT_Heme", "ADULT_Stroma"))
   
+  ### save the Seurat object as RDS file
+  saveRDS(Wenjun_Seurat_Obj, file = output_obj_path)
+  
   ### draw a UMAP
   p <- list()
   p[[1]] <- DimPlot(object = Wenjun_Seurat_Obj, reduction = "umap", raster = TRUE,
@@ -274,7 +274,6 @@ wenjun_preprocess <- function(cellranger_result_dir="Z:/ResearchHome/SharedResou
                pt.size = 0.5) +
     ggtitle(paste0("")) +
     labs(color = "Development") +
-    scale_color_brewer(palette="Set1") +
     guides(colour = guide_legend(override.aes = list(size=10))) +
     theme_classic(base_size = 48) +
     theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
@@ -288,7 +287,6 @@ wenjun_preprocess <- function(cellranger_result_dir="Z:/ResearchHome/SharedResou
                     pt.size = 0.5) +
     ggtitle(paste0("")) +
     labs(color = "Heme/Stroma") +
-    scale_color_brewer(palette="Set1") +
     guides(colour = guide_legend(override.aes = list(size=10))) +
     theme_classic(base_size = 48) +
     theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
@@ -302,7 +300,6 @@ wenjun_preprocess <- function(cellranger_result_dir="Z:/ResearchHome/SharedResou
                     pt.size = 0.5) +
     ggtitle(paste0("")) +
     labs(color = "Cell Type") +
-    scale_color_brewer(palette="Set1") +
     guides(colour = guide_legend(override.aes = list(size=10))) +
     theme_classic(base_size = 48) +
     theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
@@ -330,12 +327,12 @@ wenjun_preprocess <- function(cellranger_result_dir="Z:/ResearchHome/SharedResou
                    nrow = 2,
                    ncol = 2,
                    top = "")
-  ggsave(paste0("./data/Wenjun_Total_UMAP.png"), plot = g, width = 30, height = 16, dpi = 350)
+  ggsave(paste0("./data/Wenjun_Total_UMAP(2).png"), plot = g, width = 30, height = 16, dpi = 350)
   
-  ggsave(paste0("./data/Wenjun_UMAP_Development.png"), plot = p[[1]], width = 20, height = 10, dpi = 350)
-  ggsave(paste0("./data/Wenjun_UMAP_Cell_Type1.png"), plot = p[[2]], width = 20, height = 10, dpi = 350)
-  ggsave(paste0("./data/Wenjun_UMAP_Cell_Type2.png"), plot = p[[3]], width = 20, height = 10, dpi = 350)
-  ggsave(paste0("./data/Wenjun_UMAP_Clusters.png"), plot = p[[4]], width = 20, height = 10, dpi = 350)
+  ggsave(paste0("./data/Wenjun_UMAP_Development(2).png"), plot = p[[1]], width = 20, height = 10, dpi = 350)
+  ggsave(paste0("./data/Wenjun_UMAP_Cell_Type1(2).png"), plot = p[[2]], width = 20, height = 10, dpi = 350)
+  ggsave(paste0("./data/Wenjun_UMAP_Cell_Type2(2).png"), plot = p[[3]], width = 20, height = 10, dpi = 350)
+  ggsave(paste0("./data/Wenjun_UMAP_Clusters(2).png"), plot = p[[4]], width = 20, height = 10, dpi = 350)
   
   ### print some info for Shannon
   sapply(levels(Wenjun_Seurat_Obj$Development), function(x) {
