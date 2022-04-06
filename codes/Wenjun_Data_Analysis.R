@@ -18,7 +18,7 @@
 #                                   outputDir="./results/Wenjun_Results/")
 ###
 
-wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj.RDS",
+wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj2.RDS",
                             outputDir="./results/Wenjun_Results/") {
   
   ### load libraries
@@ -148,11 +148,11 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj.RDS",
           legend.title = element_text(size = 24, color = "black", face = "bold"),
           legend.text = element_text(size = 24, color = "black", face = "bold"),
           axis.ticks = element_blank())
-  ggsave(paste0(outputDir, "/Wenjun_UMAP_singleR_celltypes_Blueprint2.png"), plot = p, width = 20, height = 10, dpi = 350)
+  ggsave(paste0(outputDir, "/Wenjun_UMAP_singleR_celltypes_Blueprint2(2).png"), plot = p, width = 20, height = 10, dpi = 350)
   
   ### CXCL12, FOXC1, EBF3 UMAP
   p <- FeaturePlot(WJ_Seurat_Obj, features = c("Cxcl12", "Foxc1", "Ebf3"), cols = c("lightgray", "red"))
-  ggsave(paste0(outputDir, "/Wenjun_FeaturePlot_CAR_cells.png"), plot = p, width = 18, height = 10, dpi = 400)
+  ggsave(paste0(outputDir, "/Wenjun_FeaturePlot_CAR_cells(2).png"), plot = p, width = 18, height = 10, dpi = 400)
   
   ### cluster approach
   DimPlot(object = WJ_Seurat_Obj, reduction = "umap", raster = TRUE,
@@ -787,6 +787,113 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj.RDS",
     
     
   }
+  
+  
+  ###
+  ### 04/01/2022
+  ### divide the seurat into Heme and Stroma
+  Heme_WJ_Obj <- subset(WJ_Seurat_Obj,
+                        cells = rownames(WJ_Seurat_Obj@meta.data)[which(WJ_Seurat_Obj$Cell1 == "Heme")])
+  Stroma_WJ_Obj <- subset(WJ_Seurat_Obj,
+                          cells = rownames(WJ_Seurat_Obj@meta.data)[which(WJ_Seurat_Obj$Cell1 == "Stroma")])
+  
+  ### run FindAllMarkers() in each cell type
+  ### Heme
+  DimPlot(object = Heme_WJ_Obj, reduction = "umap", raster = TRUE,
+          group.by = "seurat_clusters",
+          pt.size = 1, label = TRUE)
+  sapply(levels(WJ_Seurat_Obj$seurat_clusters), function(x) {
+    return(length(intersect(which(WJ_Seurat_Obj$seurat_clusters == x),
+                            which(WJ_Seurat_Obj$Cell1 == "Heme"))))
+  })
+  Heme_WJ_Obj <- SetIdent(object = Heme_WJ_Obj,
+                          cells = rownames(Heme_WJ_Obj@meta.data),
+                          value = Heme_WJ_Obj$seurat_clusters)
+  heme_de_result_all <- FindAllMarkers(Heme_WJ_Obj,
+                                       min.cells.group = 10,
+                                       min.pct = 0.2,
+                                       logfc.threshold = 0.2,
+                                       test.use = "wilcox")
+  
+  ### write out the DE result
+  write.xlsx2(data.frame(Gene=rownames(heme_de_result_all),
+                         heme_de_result_all,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "/Wenjun_Cluster_AllMarkers_Heme.xlsx"),
+              sheetName = "Wenjun_Cluster_AllMarkers_Heme", row.names = FALSE)
+  
+  
+  ### Stroma
+  DimPlot(object = Stroma_WJ_Obj, reduction = "umap", raster = TRUE,
+          group.by = "seurat_clusters",
+          pt.size = 1, label = TRUE)
+  sapply(levels(WJ_Seurat_Obj$seurat_clusters), function(x) {
+    return(length(intersect(which(WJ_Seurat_Obj$seurat_clusters == x),
+                            which(WJ_Seurat_Obj$Cell1 == "Stroma"))))
+  })
+  Stroma_WJ_Obj <- SetIdent(object = Stroma_WJ_Obj,
+                            cells = rownames(Stroma_WJ_Obj@meta.data),
+                            value = Stroma_WJ_Obj$seurat_clusters)
+  stroma_de_result_all <- FindAllMarkers(Stroma_WJ_Obj,
+                                         min.cells.group = 20,
+                                         min.pct = 0.2,
+                                         logfc.threshold = 0.2,
+                                         test.use = "wilcox")
+  
+  ### write out the DE result
+  write.xlsx2(data.frame(Gene=rownames(stroma_de_result_all),
+                         stroma_de_result_all,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "/Wenjun_Cluster_AllMarkers_Stroma.xlsx"),
+              sheetName = "Wenjun_Cluster_AllMarkers_Stroma", row.names = FALSE)
+  
+  
+  ### put min.cells.group worked well?
+  ### Heme should not contain cluster 6, 13, 20, 23
+  ### Stroma should not contain cluster 3, 4, 5, 9, 16, 18, 22
+  print(unique(heme_de_result_all$cluster))
+  print(unique(stroma_de_result_all$cluster))
+  
+  
+  ###
+  ### computational cluster annotation
+  ###
+  
+  ### load reference annotation file
+  ref_anno <- read.xlsx2(file = paste0("./data/Chiara_Baccin_NCB_2019_marker_gene.xlsx"),
+                         sheetIndex = 1,
+                         stringsAsFactors = FALSE, check.names = FALSE)
+  ref_anno_list <- apply(ref_anno, 2, function(x) {
+    y <- x
+    y <- y[which(y != "")]
+    return(y)
+  })
+  
+  ### jacard index
+  cal_jaccard <- function(x, y) {
+    return(length(intersect(x, y)) / length(union(x, y)))
+  }
+  
+  ### see the shared markers
+  ### calculate jaccard index between clusters and cell types
+  heme_jaccard_mat <- matrix(0, nrow = length(unique(heme_de_result_all$cluster)), ncol = length(ref_anno_list))
+  rownames(heme_jaccard_mat) <- unique(heme_de_result_all$cluster)
+  colnames(heme_jaccard_mat) <- names(ref_anno_list)
+  for(clstr in rownames(heme_jaccard_mat)) {
+    for(cell_type in colnames(heme_jaccard_mat)) {
+      clstr_markers <- heme_de_result_all$gene[intersect(which(heme_de_result_all$cluster == clstr),
+                                                         which(heme_de_result_all$p_val_adj < 0.05))]
+      cell_type_markers <- ref_anno_list[[cell_type]]
+      heme_jaccard_mat[clstr,cell_type] <- cal_jaccard(clstr_markers, cell_type_markers)
+    }
+  }
+  
+  ### first, second, third guess
+  
+  
+  ### only using positive genes
+  
+  
   
   
   ### cellchat for each time point
