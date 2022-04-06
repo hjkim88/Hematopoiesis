@@ -879,25 +879,99 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj2.RDS",
   heme_jaccard_mat <- matrix(0, nrow = length(unique(heme_de_result_all$cluster)), ncol = length(ref_anno_list))
   rownames(heme_jaccard_mat) <- unique(heme_de_result_all$cluster)
   colnames(heme_jaccard_mat) <- names(ref_anno_list)
+  heme_pos_jaccard_mat <- matrix(0, nrow = length(unique(heme_de_result_all$cluster)), ncol = length(ref_anno_list))
+  rownames(heme_pos_jaccard_mat) <- unique(heme_de_result_all$cluster)
+  colnames(heme_pos_jaccard_mat) <- names(ref_anno_list)
   for(clstr in rownames(heme_jaccard_mat)) {
     for(cell_type in colnames(heme_jaccard_mat)) {
       clstr_markers <- heme_de_result_all$gene[intersect(which(heme_de_result_all$cluster == clstr),
                                                          which(heme_de_result_all$p_val_adj < 0.05))]
+      clstr_pos_markers <- intersect(clstr_markers,
+                                     heme_de_result_all$gene[which(heme_de_result_all$avg_log2FC > 0)])
       cell_type_markers <- ref_anno_list[[cell_type]]
       heme_jaccard_mat[clstr,cell_type] <- cal_jaccard(clstr_markers, cell_type_markers)
+      heme_pos_jaccard_mat[clstr,cell_type] <- cal_jaccard(clstr_pos_markers, cell_type_markers)
+    }
+  }
+  
+  stroma_jaccard_mat <- matrix(0, nrow = length(unique(stroma_de_result_all$cluster)), ncol = length(ref_anno_list))
+  rownames(stroma_jaccard_mat) <- unique(stroma_de_result_all$cluster)
+  colnames(stroma_jaccard_mat) <- names(ref_anno_list)
+  stroma_pos_jaccard_mat <- matrix(0, nrow = length(unique(stroma_de_result_all$cluster)), ncol = length(ref_anno_list))
+  rownames(stroma_pos_jaccard_mat) <- unique(stroma_de_result_all$cluster)
+  colnames(stroma_pos_jaccard_mat) <- names(ref_anno_list)
+  for(clstr in rownames(stroma_jaccard_mat)) {
+    for(cell_type in colnames(stroma_jaccard_mat)) {
+      clstr_markers <- stroma_de_result_all$gene[intersect(which(stroma_de_result_all$cluster == clstr),
+                                                           which(stroma_de_result_all$p_val_adj < 0.05))]
+      clstr_pos_markers <- intersect(clstr_markers,
+                                     stroma_de_result_all$gene[which(stroma_de_result_all$avg_log2FC > 0)])
+      cell_type_markers <- ref_anno_list[[cell_type]]
+      stroma_jaccard_mat[clstr,cell_type] <- cal_jaccard(clstr_markers, cell_type_markers)
+      stroma_pos_jaccard_mat[clstr,cell_type] <- cal_jaccard(clstr_pos_markers, cell_type_markers)
     }
   }
   
   ### first, second, third guess
+  heme_guessing <- sapply(rownames(heme_jaccard_mat), function(x) {
+    temp_row <- heme_jaccard_mat[x,]
+    temp_row <- temp_row[order(-temp_row)]
+    return(names(temp_row)[1:3])
+  })
   
+  heme_pos_guessing <- sapply(rownames(heme_pos_jaccard_mat), function(x) {
+    temp_row <- heme_pos_jaccard_mat[x,]
+    temp_row <- temp_row[order(-temp_row)]
+    return(names(temp_row)[1:3])
+  })
   
-  ### only using positive genes
+  stroma_guessing <- sapply(rownames(stroma_jaccard_mat), function(x) {
+    temp_row <- stroma_jaccard_mat[x,]
+    temp_row <- temp_row[order(-temp_row)]
+    return(names(temp_row)[1:3])
+  })
   
+  stroma_pos_guessing <- sapply(rownames(stroma_pos_jaccard_mat), function(x) {
+    temp_row <- stroma_pos_jaccard_mat[x,]
+    temp_row <- temp_row[order(-temp_row)]
+    return(names(temp_row)[1:3])
+  })
   
+  ### check how the normal and the pos different from each other
+  ### it turned out they are exactly the same
+  print(identical(heme_guessing, heme_pos_guessing))
+  print(identical(stroma_guessing, stroma_pos_guessing))
   
+  ### computational annotation
+  ### cluster 7 is shared but should be Heme cells
+  ### Anyway both Heme & Stroma cluster 7 indicates the same cell type, so no problem
+  WJ_Seurat_Obj$computational_annotation <- NA
+  for(clstr in colnames(stroma_guessing)) {
+    WJ_Seurat_Obj$computational_annotation[which(WJ_Seurat_Obj$seurat_clusters == clstr)] <- stroma_guessing[1,clstr]
+  }
+  for(clstr in colnames(heme_guessing)) {
+    WJ_Seurat_Obj$computational_annotation[which(WJ_Seurat_Obj$seurat_clusters == clstr)] <- heme_guessing[1,clstr]
+  }
   
-  ### cellchat for each time point
+  ### UMAP plot with new computational annotation
+  p <- DimPlot(object = WJ_Seurat_Obj, reduction = "umap", raster = TRUE,
+               group.by = "computational_annotation",
+               pt.size = 1) +
+    ggtitle(paste0("Annotated Cell Types")) +
+    labs(color = "Annotation") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 24, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  ggsave(paste0(outputDir, "/Wenjun_UMAP_Computational_Annotation.png"), plot = p, width = 20, height = 10, dpi = 350)
   
+  ###
+  ### ok. now, cellchat for each time point
+  ###
   
   
   
