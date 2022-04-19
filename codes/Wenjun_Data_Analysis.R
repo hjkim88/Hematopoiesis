@@ -822,6 +822,9 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj2.RDS",
               file = paste0(outputDir, "/Wenjun_Cluster_AllMarkers_Heme.xlsx"),
               sheetName = "Wenjun_Cluster_AllMarkers_Heme", row.names = FALSE)
   
+  # heme_de_result_all <- read.xlsx2(file = paste0(outputDir, "/Wenjun_Cluster_AllMarkers_Heme.xlsx"), sheetIndex = 1,
+  #                                  stringsAsFactors = FALSE, check.names = FALSE, row.names = 1)
+  
   
   ### Stroma
   DimPlot(object = Stroma_WJ_Obj, reduction = "umap", raster = TRUE,
@@ -846,6 +849,9 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj2.RDS",
                          stringsAsFactors = FALSE, check.names = FALSE),
               file = paste0(outputDir, "/Wenjun_Cluster_AllMarkers_Stroma.xlsx"),
               sheetName = "Wenjun_Cluster_AllMarkers_Stroma", row.names = FALSE)
+  
+  # stroma_de_result_all <- read.xlsx2(file = paste0(outputDir, "/Wenjun_Cluster_AllMarkers_Stroma.xlsx"), sheetIndex = 1,
+  #                                    stringsAsFactors = FALSE, check.names = FALSE, row.names = 1)
   
   
   ### put min.cells.group worked well?
@@ -973,9 +979,122 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj2.RDS",
   ### ok. now, cellchat for each time point
   ###
   
+  cellchat_list <- vector("list", length = length(levels(WJ_Seurat_Obj$Development)))
+  names(cellchat_list) <- levels(WJ_Seurat_Obj$Development)
+  for(tp in levels(WJ_Seurat_Obj$Development)) {
+    
+    ### subset for the specific time point
+    subset_obj <- subset(WJ_Seurat_Obj,
+                         cells = rownames(WJ_Seurat_Obj@meta.data)[which(WJ_Seurat_Obj$Development == tp)])
+    
+    ### see how many cells in each cell group
+    sapply(unique(subset_obj$computational_annotation), function(x) {
+      return(length(which(subset_obj$computational_annotation == x)))
+    })
+    
+    ### cell chat
+    ### create a cell chat object
+    cellchat <- createCellChat(object = subset_obj, group.by = "computational_annotation")
+    
+    ### set ligand-receptor interaction db
+    ### CellChatDB <- CellChatDB.human
+    CellChatDB <- CellChatDB.mouse
+    
+    ### use a subset of CellChatDB for cell-cell communication analysis
+    ### CellChatDB.use <- subsetDB(CellChatDB, search = "Secreted Signaling") # use Secreted Signaling
+    ### use all CellChatDB for cell-cell communication analysis
+    CellChatDB.use <- CellChatDB
+    
+    ### set the used database in the object
+    cellchat@DB <- CellChatDB.use
+    
+    ### subset the expression data of signaling genes for saving computation cost
+    cellchat <- subsetData(cellchat) # This step is necessary even if using the whole database
+    
+    ### Preprocessing
+    cellchat <- identifyOverExpressedGenes(cellchat)
+    cellchat <- identifyOverExpressedInteractions(cellchat)
+    ### project gene expression data onto PPI network (optional)
+    cellchat <- projectData(cellchat, PPI.mouse)
+    
+    ### Compute the communication probability and infer cellular communication network
+    cellchat <- computeCommunProb(cellchat)
+    ### Filter out the cell-cell communication if there are only few number of cells in certain cell groups
+    cellchat <- filterCommunication(cellchat, min.cells = 20)
+    
+    ### Infer the cell-cell communication at a signaling pathway level
+    cellchat <- computeCommunProbPathway(cellchat)
+    
+    ### Calculate the aggregated cell-cell communication network
+    cellchat <- aggregateNet(cellchat)
+    
+    ### save the cellchat result to the list
+    cellchat_list[[tp]] <- cellchat
+    
+    gc()
+    
+  }
   
-  
-  
+  ### make cellchat figures for each time point
+  for(tp in levels(WJ_Seurat_Obj$Development)) {
+    
+    ### create output path for each time point
+    outputDir2 <- paste0(outputDir, "/cellchat/", tp, "/")
+    dir.create(path = outputDir2, recursive = TRUE)
+    
+    ### empty list
+    plot_list[[tp]] <- list()
+    
+    ### We can also visualize the aggregated cell-cell communication network.
+    ### For example, showing the number of interactions or the total interaction strength (weights) between any two cell groups using circle plot.
+    groupSize <- as.numeric(table(cellchat_list[[tp]]@idents))
+    png(filename = paste0(outputDir2, "/", tp, "_Cellchat_Circle_Interaction.png"), width = 3000, height = 2500, res = 350)
+    netVisual_circle(cellchat_list[[tp]]@net$weight, vertex.weight = groupSize, weight.scale = T, label.edge= F, title.name = "Interaction weights/strength")
+    dev.off()
+    
+    ### Due to the complicated cell-cell communication network, we can examine the signaling sent from each cell group.
+    ### Here we also control the parameter edge.weight.max so that we can compare edge weights between different networks.
+    mat <- cellchat_list[[tp]]@net$weight
+    png(filename = paste0(outputDir2, "/", tp, "_Cellchat_Circle_Interaction_Each.png"), width = 4000, height = 3000, res = 300)
+    par(mfrow = c(4,4), xpd=TRUE)
+    for (i in 1:nrow(mat)) {
+      mat2 <- matrix(0, nrow = nrow(mat), ncol = ncol(mat), dimnames = dimnames(mat))
+      mat2[i, ] <- mat[i, ]
+      netVisual_circle(mat2, vertex.weight = groupSize, weight.scale = T,
+                       edge.weight.max = max(mat), title.name = rownames(mat)[i],
+                       vertex.label.cex = 0.4)
+    }
+    dev.off()
+    
+    ### One can visualize the inferred communication network of signaling pathways using netVisual_aggregate,
+    ### and visualize the inferred communication networks of individual L-R pairs associated with that signaling pathway using netVisual_individual.
+    print(cellchat_list[[tp]]@netP$pathways)
+    pathways.show <- c("CXCL")
+    png(filename = paste0(outputDir2, "/", tp, "_Cellchat_Circle_CXCL.png"), width = 3000, height = 2500, res = 350)
+    netVisual_aggregate(cellchat_list[[tp]], signaling = pathways.show,  layout = "circle")
+    dev.off()
+    png(filename = paste0(outputDir2, "/", tp, "_Cellchat_Heatmap_CXCL.png"), width = 3000, height = 2500, res = 350)
+    netVisual_heatmap(cellchat_list[[tp]], signaling = pathways.show, color.heatmap = "Reds")
+    dev.off()
+    
+    ### Compute the contribution of each ligand-receptor pair to the overall signaling pathway and
+    ### visualize cell-cell communication mediated by a single ligand-receptor pair
+    png(filename = paste0(outputDir2, "/", tp, "_Cellchat_LR_Contribution_CXCL.png"), width = 3000, height = 2500, res = 350)
+    netAnalysis_contribution(cellchat_list[[tp]], signaling = pathways.show)
+    dev.off()
+    
+    ### show all the significant interactions (L-R pairs) from some cell groups (defined by 'sources.use')
+    ### to other cell groups (defined by 'targets.use')
+    png(filename = paste0(outputDir2, "/", tp, "_Cellchat_Significant_LR.png"), width = 7000, height = 10000, res = 300)
+    netVisual_bubble(cellchat_list[[tp]], sources.use = NULL, targets.use = NULL, remove.isolate = TRUE, thresh = 0.01)
+    dev.off()
+    
+    ### Gene expression of the signaling pathway genes
+    png(filename = paste0(outputDir2, "/", tp, "_Cellchat_Gene_Exp_CXCL.png"), width = 3000, height = 2500, res = 350)
+    plotGeneExpression(cellchat, signaling = "CXCL")
+    dev.off()
+    
+  }
   
   
 }
