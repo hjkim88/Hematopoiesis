@@ -76,6 +76,10 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj2.RDS",
     install.packages("xlsx")
     require(xlsx, quietly = TRUE)
   }
+  if(!require(RColorBrewer, quietly = TRUE)) {
+    install.packages("RColorBrewer")
+    require(RColorBrewer, quietly = TRUE)
+  }
   
   ### load seurat object
   WJ_Seurat_Obj <- readRDS(file = Seurat_Obj_Path)
@@ -819,10 +823,10 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj2.RDS",
   write.xlsx2(data.frame(Gene=rownames(heme_de_result_all),
                          heme_de_result_all,
                          stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "/Wenjun_Cluster_AllMarkers_Heme.xlsx"),
+              file = paste0(outputDir, "/Wenjun_Cluster_AllMarkers_Heme(2).xlsx"),
               sheetName = "Wenjun_Cluster_AllMarkers_Heme", row.names = FALSE)
   
-  # heme_de_result_all <- read.xlsx2(file = paste0(outputDir, "/Wenjun_Cluster_AllMarkers_Heme.xlsx"), sheetIndex = 1,
+  # heme_de_result_all <- read.xlsx2(file = paste0(outputDir, "/Wenjun_Cluster_AllMarkers_Heme(2).xlsx"), sheetIndex = 1,
   #                                  stringsAsFactors = FALSE, check.names = FALSE, row.names = 1)
   
   
@@ -838,7 +842,7 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj2.RDS",
                             cells = rownames(Stroma_WJ_Obj@meta.data),
                             value = Stroma_WJ_Obj$seurat_clusters)
   stroma_de_result_all <- FindAllMarkers(Stroma_WJ_Obj,
-                                         min.cells.group = 20,
+                                         min.cells.group = 10,
                                          min.pct = 0.2,
                                          logfc.threshold = 0.2,
                                          test.use = "wilcox")
@@ -847,16 +851,16 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj2.RDS",
   write.xlsx2(data.frame(Gene=rownames(stroma_de_result_all),
                          stroma_de_result_all,
                          stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "/Wenjun_Cluster_AllMarkers_Stroma.xlsx"),
+              file = paste0(outputDir, "/Wenjun_Cluster_AllMarkers_Stroma(2).xlsx"),
               sheetName = "Wenjun_Cluster_AllMarkers_Stroma", row.names = FALSE)
   
-  # stroma_de_result_all <- read.xlsx2(file = paste0(outputDir, "/Wenjun_Cluster_AllMarkers_Stroma.xlsx"), sheetIndex = 1,
+  # stroma_de_result_all <- read.xlsx2(file = paste0(outputDir, "/Wenjun_Cluster_AllMarkers_Stroma(2).xlsx"), sheetIndex = 1,
   #                                    stringsAsFactors = FALSE, check.names = FALSE, row.names = 1)
   
   
   ### put min.cells.group worked well?
-  ### Heme should not contain cluster 6, 13, 20, 23
-  ### Stroma should not contain cluster 3, 4, 5, 9, 16, 18, 22
+  ### Heme should not contain cluster 0, 1, 3, 9, 10, 11, 13, 14, 15, 16, 17, 21
+  ### Stroma should not contain cluster 2, 5, 6, 7, 8, 12, 18, 19, 20
   print(unique(heme_de_result_all$cluster))
   print(unique(stroma_de_result_all$cluster))
   
@@ -880,6 +884,18 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj2.RDS",
     return(length(intersect(x, y)) / length(union(x, y)))
   }
   
+  ### number of DE genes by FDR in each cluster
+  p.adj.tresh <- 1E-200
+  sapply(unique(heme_de_result_all$cluster), function(x) {
+    return(length(intersect(which(heme_de_result_all$cluster == x),
+                            which(heme_de_result_all$p_val_adj < p.adj.tresh))))
+  })
+  sapply(unique(stroma_de_result_all$cluster), function(x) {
+    return(length(intersect(which(stroma_de_result_all$cluster == x),
+                            which(stroma_de_result_all$p_val_adj < p.adj.tresh))))
+  })
+  
+  
   ### see the shared markers
   ### calculate jaccard index between clusters and cell types
   heme_jaccard_mat <- matrix(0, nrow = length(unique(heme_de_result_all$cluster)), ncol = length(ref_anno_list))
@@ -891,7 +907,7 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj2.RDS",
   for(clstr in rownames(heme_jaccard_mat)) {
     for(cell_type in colnames(heme_jaccard_mat)) {
       clstr_markers <- heme_de_result_all$gene[intersect(which(heme_de_result_all$cluster == clstr),
-                                                         which(heme_de_result_all$p_val_adj < 0.05))]
+                                                         which(heme_de_result_all$p_val_adj < p.adj.tresh))]
       clstr_pos_markers <- intersect(clstr_markers,
                                      heme_de_result_all$gene[which(heme_de_result_all$avg_log2FC > 0)])
       cell_type_markers <- ref_anno_list[[cell_type]]
@@ -909,7 +925,7 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj2.RDS",
   for(clstr in rownames(stroma_jaccard_mat)) {
     for(cell_type in colnames(stroma_jaccard_mat)) {
       clstr_markers <- stroma_de_result_all$gene[intersect(which(stroma_de_result_all$cluster == clstr),
-                                                           which(stroma_de_result_all$p_val_adj < 0.05))]
+                                                           which(stroma_de_result_all$p_val_adj < p.adj.tresh))]
       clstr_pos_markers <- intersect(clstr_markers,
                                      stroma_de_result_all$gene[which(stroma_de_result_all$avg_log2FC > 0)])
       cell_type_markers <- ref_anno_list[[cell_type]]
@@ -944,13 +960,13 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj2.RDS",
   })
   
   ### check how the normal and the pos different from each other
-  ### it turned out they are exactly the same
+  ### it turned out they are exactly the same (in 1st and 2nd guessing - few 3rd guessing were different)
   print(identical(heme_guessing, heme_pos_guessing))
   print(identical(stroma_guessing, stroma_pos_guessing))
   
   ### computational annotation
-  ### cluster 7 is shared but should be Heme cells
-  ### Anyway both Heme & Stroma cluster 7 indicates the same cell type, so no problem
+  ### cluster 4 is shared but should be Heme cells
+  ### Anyway both Heme & Stroma cluster 4 indicates the same cell type, so no problem
   WJ_Seurat_Obj$computational_annotation <- NA
   for(clstr in colnames(stroma_guessing)) {
     WJ_Seurat_Obj$computational_annotation[which(WJ_Seurat_Obj$seurat_clusters == clstr)] <- stroma_guessing[1,clstr]
@@ -973,7 +989,130 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj2.RDS",
           legend.title = element_text(size = 24, color = "black", face = "bold"),
           legend.text = element_text(size = 24, color = "black", face = "bold"),
           axis.ticks = element_blank())
-  ggsave(paste0(outputDir, "/Wenjun_UMAP_Computational_Annotation.png"), plot = p, width = 20, height = 10, dpi = 350)
+  ggsave(paste0(outputDir, "/Wenjun_UMAP_Computational_Annotation(2).png"), plot = p, width = 20, height = 10, dpi = 350)
+  
+  
+  ### Original manual cell annotation before adding P0 & Adults
+  Original_Obj <- readRDS(file = "./data/Wenjun_Seurat_Obj.RDS")
+  
+  ### check whether the orders are the same
+  print(identical(rownames(Original_Obj@meta.data), colnames(Original_Obj@assays$RNA@counts)))
+  print(identical(names(Idents(object = Original_Obj)), rownames(Original_Obj@meta.data)))
+  
+  ### annotation by clusters
+  Original_Obj$WJ_Annotation <- NA
+  Original_Obj$WJ_Annotation[which(Original_Obj$seurat_clusters == "0")] <- "Chondrocytes"
+  Original_Obj$WJ_Annotation[which(Original_Obj$seurat_clusters == "1")] <- "Monocyte progenitors"
+  Original_Obj$WJ_Annotation[which(Original_Obj$seurat_clusters == "2")] <- "Fibroblasts"
+  Original_Obj$WJ_Annotation[which(Original_Obj$seurat_clusters == "3")] <- "Neutrophils"
+  Original_Obj$WJ_Annotation[which(Original_Obj$seurat_clusters == "4")] <- "Erythroblasts"
+  Original_Obj$WJ_Annotation[which(Original_Obj$seurat_clusters == "5")] <- "B cells"
+  Original_Obj$WJ_Annotation[which(Original_Obj$seurat_clusters == "6")] <- "B cells"
+  Original_Obj$WJ_Annotation[which(Original_Obj$seurat_clusters == "7")] <- "Endothelial cells"
+  Original_Obj$WJ_Annotation[which(Original_Obj$seurat_clusters == "8")] <- "Schwann cells"
+  Original_Obj$WJ_Annotation[which(Original_Obj$seurat_clusters == "9")] <- "Smooth muscle cells"
+  Original_Obj$WJ_Annotation[which(Original_Obj$seurat_clusters == "10")] <- "Myofibroblasts"
+  Original_Obj$WJ_Annotation[which(Original_Obj$seurat_clusters == "11")] <- "CAR"
+  Original_Obj$WJ_Annotation[which(Original_Obj$seurat_clusters == "12")] <- "Monocyte"
+  
+  DimPlot(object = Original_Obj, reduction = "umap", raster = TRUE,
+          group.by = "WJ_Annotation",
+          pt.size = 1)
+  
+  ### check whether previous & current obj have the same lib.ident for the same library
+  ### TRUE
+  sapply(unique(Original_Obj$library), function(x) {
+    return(paste(unique(Original_Obj$lib.ident[which(Original_Obj$library == x)]), collapse = "_"))
+  })
+  sapply(unique(WJ_Seurat_Obj$library), function(x) {
+    return(paste(unique(WJ_Seurat_Obj$lib.ident[which(WJ_Seurat_Obj$library == x)]), collapse = "_"))
+  })
+  
+  ### add previous manual cell annotation to the current obj for comparison
+  WJ_Seurat_Obj$Previous_WJ_Annotation <- "NA"
+  WJ_Seurat_Obj@meta.data[rownames(Original_Obj@meta.data),"Previous_WJ_Annotation"] <- Original_Obj$WJ_Annotation
+  
+  ### compare two annotations in UMAP
+  p1 <- DimPlot(object = WJ_Seurat_Obj, reduction = "umap", raster = TRUE,
+                group.by = "computational_annotation",
+                pt.size = 1) +
+    ggtitle(paste0("New Annotation")) +
+    labs(color = "Annotation") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 24, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  col_pal <- c(colorRampPalette(brewer.pal(12, "Set1"))(12), "white")
+  names(col_pal) <- unique(WJ_Seurat_Obj$Previous_WJ_Annotation)
+  p2 <- DimPlot(object = WJ_Seurat_Obj, reduction = "umap", raster = TRUE,
+                group.by = "Previous_WJ_Annotation",
+                pt.size = 1, order = unique(WJ_Seurat_Obj$Previous_WJ_Annotation)) +
+    ggtitle(paste0("Previous Annotation")) +
+    labs(color = "Annotation") +
+    scale_color_manual(values = col_pal) +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 24, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  
+  ### print out the UMAPs
+  g <- arrangeGrob(grobs = list(p1, p2),
+                   nrow = 1,
+                   ncol = 2,
+                   top = "")
+  ggsave(paste0(outputDir, "Wenjun_UMAP_Compare_Two_Annotations.png"), plot = g, width = 40, height = 10, dpi = 350)
+  
+  ### number/percentage of car cells change over time
+  sapply(levels(WJ_Seurat_Obj$Development), function(x) {
+    return(length(intersect(which(WJ_Seurat_Obj$Development == x),
+                            which(WJ_Seurat_Obj$computational_annotation == "Adipo-CAR"))))
+  })
+  sapply(levels(WJ_Seurat_Obj$Development), function(x) {
+    return(round(100 * length(intersect(which(WJ_Seurat_Obj$Development == x),
+                                        which(WJ_Seurat_Obj$computational_annotation == "Adipo-CAR"))) / length(which(WJ_Seurat_Obj$Development == x)),3))
+  })
+  
+  ### draw bar plots
+  plot_df <- data.frame(Time=levels(WJ_Seurat_Obj$Development),
+                        CAR_Cell_Num=sapply(levels(WJ_Seurat_Obj$Development), function(x) {
+                          return(length(intersect(which(WJ_Seurat_Obj$Development == x),
+                                                  which(WJ_Seurat_Obj$computational_annotation == "Adipo-CAR"))))
+                        }),
+                        CAR_Cell_Pcnt=sapply(levels(WJ_Seurat_Obj$Development), function(x) {
+                          return(round(100 * length(intersect(which(WJ_Seurat_Obj$Development == x),
+                                                              which(WJ_Seurat_Obj$computational_annotation == "Adipo-CAR"))) / length(which(WJ_Seurat_Obj$Development == x)),3))
+                        }),
+                        stringsAsFactors = FALSE, check.names = FALSE)
+  plot_df$Time <- factor(plot_df$Time, levels = levels(WJ_Seurat_Obj$Development))
+  
+  p1 <- ggplot(data = plot_df,
+               aes(x = Time, y = CAR_Cell_Num, fill = Time)) +
+          geom_bar(stat = "identity", width = 1) +
+          ggtitle(paste0("CAR Cell #")) +
+          scale_fill_brewer(palette="Set1") +
+          theme_classic(base_size = 36)
+  p2 <- ggplot(data = plot_df,
+               aes(x = Time, y = CAR_Cell_Pcnt, fill = Time)) +
+    geom_bar(stat = "identity", width = 1) +
+    ggtitle(paste0("CAR Cell %")) +
+    scale_fill_brewer(palette="Set1") +
+    theme_classic(base_size = 36)
+  
+  ### print out the bar plots
+  g <- arrangeGrob(grobs = list(p1, p2),
+                   nrow = 1,
+                   ncol = 2,
+                   top = "")
+  ggsave(paste0(outputDir, "Wenjun_CAR_Cell_Bar_Plots.png"), plot = g, width = 30, height = 10, dpi = 350)
+  
   
   ###
   ### ok. now, cellchat for each time point
@@ -1042,9 +1181,6 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj2.RDS",
     outputDir2 <- paste0(outputDir, "/cellchat/", tp, "/")
     dir.create(path = outputDir2, recursive = TRUE)
     
-    ### empty list
-    plot_list[[tp]] <- list()
-    
     ### We can also visualize the aggregated cell-cell communication network.
     ### For example, showing the number of interactions or the total interaction strength (weights) between any two cell groups using circle plot.
     groupSize <- as.numeric(table(cellchat_list[[tp]]@idents))
@@ -1085,13 +1221,13 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj2.RDS",
     
     ### show all the significant interactions (L-R pairs) from some cell groups (defined by 'sources.use')
     ### to other cell groups (defined by 'targets.use')
-    png(filename = paste0(outputDir2, "/", tp, "_Cellchat_Significant_LR.png"), width = 7000, height = 10000, res = 300)
+    png(filename = paste0(outputDir2, "/", tp, "_Cellchat_Significant_LR.png"), width = 7000, height = 12000, res = 300)
     netVisual_bubble(cellchat_list[[tp]], sources.use = NULL, targets.use = NULL, remove.isolate = TRUE, thresh = 0.01)
     dev.off()
     
     ### Gene expression of the signaling pathway genes
     png(filename = paste0(outputDir2, "/", tp, "_Cellchat_Gene_Exp_CXCL.png"), width = 3000, height = 2500, res = 350)
-    plotGeneExpression(cellchat, signaling = "CXCL")
+    plotGeneExpression(cellchat_list[[tp]], signaling = "CXCL")
     dev.off()
     
   }
