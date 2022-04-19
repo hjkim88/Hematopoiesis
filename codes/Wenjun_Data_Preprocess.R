@@ -173,13 +173,14 @@ wenjun_preprocess <- function(cellranger_result_dir="Z:/ResearchHome/SharedResou
     
   }
   
-  ### remove TDH026_1350503, TDH026_1355923, TDH027_1350504, TDH027_1355924
-  ### since they are low quality data
+  ### remove TDH026_1350503, TDH026_1355923, TDH027_1350504, TDH027_1355924, TDH008_1094045
+  ### since they are low quality data, and TDH008_1094045 is a double sequenced sample
   Wenjun_Seurat_Obj <- subset(Wenjun_Seurat_Obj,
                               cells = rownames(Wenjun_Seurat_Obj@meta.data)[-which(Wenjun_Seurat_Obj$library %in% c("TDH026_1350503",
                                                                                                                     "TDH026_1355923",
                                                                                                                     "TDH027_1350504",
-                                                                                                                    "TDH027_1355924"))])
+                                                                                                                    "TDH027_1355924",
+                                                                                                                    "TDH008_1094045"))])
   
   ### annotate some more
   Wenjun_Seurat_Obj$Development <- ""
@@ -187,12 +188,12 @@ wenjun_preprocess <- function(cellranger_result_dir="Z:/ResearchHome/SharedResou
   Wenjun_Seurat_Obj$Development[which(Wenjun_Seurat_Obj$library %in% c("TDH018_2", "TDH019_2"))] <- "P14"
   Wenjun_Seurat_Obj$Development[which(Wenjun_Seurat_Obj$library %in% c("Wenjun_Heme2_2", "Wenjun_Stromal2_2"))] <- "P21"
   Wenjun_Seurat_Obj$Development[which(Wenjun_Seurat_Obj$library %in% c("Wenjun_Heme1_2", "Wenjun_Stromal1_2"))] <- "P28"
-  Wenjun_Seurat_Obj$Development[which(Wenjun_Seurat_Obj$library %in% c("TDH007", "TDH008_1094045", "TDH008_1106032"))] <- "P0"
+  Wenjun_Seurat_Obj$Development[which(Wenjun_Seurat_Obj$library %in% c("TDH007", "TDH008_1106032"))] <- "P0"
   Wenjun_Seurat_Obj$Development[which(Wenjun_Seurat_Obj$library %in% c("TDH001", "TDH002"))] <- "ADULT"
   
   Wenjun_Seurat_Obj$Cell1 <- ""
   Wenjun_Seurat_Obj$Cell1[which(Wenjun_Seurat_Obj$library %in% c("TDH017", "TDH018_2", "Wenjun_Heme2_2", "Wenjun_Heme1_2", "TDH007", "TDH001"))] <- "Heme"
-  Wenjun_Seurat_Obj$Cell1[which(Wenjun_Seurat_Obj$library %in% c("TDH019_2", "TDH025_2", "Wenjun_Stromal2_2", "Wenjun_Stromal1_2", "TDH008_1094045", "TDH008_1106032", "TDH002"))] <- "Stroma"
+  Wenjun_Seurat_Obj$Cell1[which(Wenjun_Seurat_Obj$library %in% c("TDH019_2", "TDH025_2", "Wenjun_Stromal2_2", "Wenjun_Stromal1_2", "TDH008_1106032", "TDH002"))] <- "Stroma"
   
   Wenjun_Seurat_Obj$Cell2 <- paste0(Wenjun_Seurat_Obj$Development, "_", Wenjun_Seurat_Obj$Cell1)
   
@@ -209,8 +210,8 @@ wenjun_preprocess <- function(cellranger_result_dir="Z:/ResearchHome/SharedResou
   FeatureScatter(Wenjun_Seurat_Obj, feature1 = "nCount_RNA", feature2 = "percent.mt") + NoLegend()
   FeatureScatter(Wenjun_Seurat_Obj, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") + NoLegend()
   
-  ### Filter cells that have unique feature counts over 7000 or less than 1000
-  ### Filter cells that have RNA mocule # > 50000 or RNA mocule # < 3000
+  ### Filter cells that have unique feature counts over 6000 or less than 1000
+  ### Filter cells that have RNA molcule # > 50000 or RNA molcule # < 3000
   ### Filter cells that have > 10% mitochondrial counts
   Wenjun_Seurat_Obj <- subset(Wenjun_Seurat_Obj, subset = nFeature_RNA > 1000 & nFeature_RNA < 6000 & nCount_RNA > 3000 & nCount_RNA < 50000 & percent.mt < 10)
   
@@ -221,8 +222,8 @@ wenjun_preprocess <- function(cellranger_result_dir="Z:/ResearchHome/SharedResou
   ### Basic function to convert human to mouse gene names
   convertHumanGeneList <- function(x){
     require("biomaRt")
-    human = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
-    mouse = useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+    human = useMart("ensembl", dataset = "hsapiens_gene_ensembl", host = "https://dec2021.archive.ensembl.org/")
+    mouse = useMart("ensembl", dataset = "mmusculus_gene_ensembl", host = "https://dec2021.archive.ensembl.org/")
     genesV2 = getLDS(attributes = c("hgnc_symbol"), filters = "hgnc_symbol", values = x , mart = human, attributesL = c("mgi_symbol"), martL = mouse, uniqueRows=T)
     humanx <- unique(genesV2[, 2])
     
