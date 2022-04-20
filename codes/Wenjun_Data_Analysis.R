@@ -1114,6 +1114,10 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj2.RDS",
   ggsave(paste0(outputDir, "Wenjun_CAR_Cell_Bar_Plots.png"), plot = g, width = 30, height = 10, dpi = 350)
   
   
+  ### save the Seurat object as RDS file
+  saveRDS(WJ_Seurat_Obj, file = "./data/Wenjun_Seurat_Obj3.RDS")
+  
+  
   ###
   ### ok. now, cellchat for each time point
   ###
@@ -1231,6 +1235,31 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj2.RDS",
     dev.off()
     
   }
+  
+  
+  
+  ### Shannon asked to make a cloupe file that incorporates the new UMAP and clustering info
+  ### the basic cloupe file exists and we want to add more csv files
+  umap <- Embeddings(WJ_Seurat_Obj, reduction = "umap")
+  projection_df <- data.frame(Barcode=rownames(umap),
+                              UMAP1=umap[,1],
+                              UMAP2=umap[,2],
+                              stringsAsFactors = FALSE, check.names = FALSE)
+  write.csv(projection_df, file = paste0("./data/loupe_projection.csv"), row.names = FALSE)
+  
+  category_df <- data.frame(Barcode=rownames(WJ_Seurat_Obj@meta.data),
+                            Library=WJ_Seurat_Obj$library,
+                            Development=WJ_Seurat_Obj$Development,
+                            Cell1=WJ_Seurat_Obj$Cell1,
+                            Cell2=WJ_Seurat_Obj$Cell2,
+                            Phase=WJ_Seurat_Obj$Phase,
+                            Seurat_Clusters=WJ_Seurat_Obj$seurat_clusters,
+                            Computational_Annotation=WJ_Seurat_Obj$computational_annotation,
+                            stringsAsFactors = FALSE, check.names = FALSE)
+  write.csv(category_df, file = paste0("./data/loupe_category.csv"), row.names = FALSE)
+  
+  
+  
   
   
 }
