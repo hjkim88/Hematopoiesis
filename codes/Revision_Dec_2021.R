@@ -110,6 +110,17 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   
   ### -> We can make the elbow plots, ridge/violin plots, UMAP plot of batch effect, UMI distribution etc.
   
+  ### Basic function to convert human to mouse gene names
+  convertHumanGeneList <- function(x){
+    require("biomaRt")
+    human = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+    mouse = useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+    genesV2 = getLDS(attributes = c("hgnc_symbol"), filters = "hgnc_symbol", values = x , mart = human, attributesL = c("mgi_symbol"), martL = mouse, uniqueRows=T)
+    humanx <- unique(genesV2[, 2])
+    
+    return(humanx)
+  }
+  
   ### normalization
   Updated_Seurat_Obj <- NormalizeData(Updated_Seurat_Obj,
                                       normalization.method = "LogNormalize", scale.factor = 10000)
@@ -133,7 +144,7 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
                                npcs = 50)
   
   ### UMAP
-  Updated_Seurat_Obj <- RunUMAP(Updated_Seurat_Obj, dims = 1:50)
+  Updated_Seurat_Obj <- RunUMAP(Updated_Seurat_Obj, dims = 1:20)
   
   ### 1. Elbow plot
   n <- 20
@@ -211,6 +222,12 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
             axis.ticks = element_blank())
     ggsave(paste0(outputDir, "PCA_plot_", var, "_.png"), plot = p, width = 20, height = 10, dpi = 350)
   }
+  
+  ### new UMAP with new combined annotation - there are too many same cell type clusters
+  Updated_Seurat_Obj$Combined_Annotation <- Updated_Seurat_Obj$Annotation
+  
+  
+  
   
   ### UMI distribution - density plot
   temp <- apply(Updated_Seurat_Obj@assays$RNA@counts, 2, mean)
@@ -2317,15 +2334,17 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
       }
     }
     
-    new_rownames <- convert_symbols_by_species(src_genes = rownames(slot(seu@assays[["RNA"]], "scale.data")), src_species = "human")
-    
-    if(any(new_rownames == '')) {
-      remove_idx <- which(new_rownames == '')
+    if(nrow(seu@assays$RNA@scale.data) != 0) {
+      new_rownames <- convert_symbols_by_species(src_genes = rownames(slot(seu@assays[["RNA"]], "scale.data")), src_species = "human")
       
-      rownames(slot(seu@assays[["RNA"]], "scale.data")) <- new_rownames
-      slot(seu@assays[["RNA"]], "scale.data") <- slot(seu@assays[["RNA"]], "scale.data")[-remove_idx,]
-    } else {
-      rownames(slot(seu@assays[["RNA"]], "scale.data")) <- new_rownames
+      if(any(new_rownames == '')) {
+        remove_idx <- which(new_rownames == '')
+        
+        rownames(slot(seu@assays[["RNA"]], "scale.data")) <- new_rownames
+        slot(seu@assays[["RNA"]], "scale.data") <- slot(seu@assays[["RNA"]], "scale.data")[-remove_idx,]
+      } else {
+        rownames(slot(seu@assays[["RNA"]], "scale.data")) <- new_rownames
+      }
     }
     
     return(seu)
@@ -2380,10 +2399,10 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   }
   
   ### get human_to_mouse_homologs table
-  biomaRt::listMarts(host="www.ensembl.org")
-  human_mart <- biomaRt::useMart(host="www.ensembl.org", "ENSEMBL_MART_ENSEMBL", dataset="hsapiens_gene_ensembl")
-  mouse_mart <- biomaRt::useMart(host="www.ensembl.org", "ENSEMBL_MART_ENSEMBL", dataset="mmusculus_gene_ensembl")
-
+  biomaRt::listMarts(host="https://dec2021.archive.ensembl.org/")
+  human_mart <- biomaRt::useMart(host="https://dec2021.archive.ensembl.org/", "ENSEMBL_MART_ENSEMBL", dataset="hsapiens_gene_ensembl")
+  mouse_mart <- biomaRt::useMart(host="https://dec2021.archive.ensembl.org/", "ENSEMBL_MART_ENSEMBL", dataset="mmusculus_gene_ensembl")
+  
   human_to_mouse_homologs = biomaRt::getLDS(attributes = c("hgnc_symbol","entrezgene_id","ensembl_gene_id"),
                                           # filters = "hgnc_symbol", values = hs_genes,
                                           # filters = "entrezgene_id", values = hs_entrez,
@@ -3016,6 +3035,164 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
           axis.ticks = element_blank())
   ggsave(paste0(outputDir, "UMAP_Anchor_Combined_All3_Interesting5.png"), plot = p, width = 20, height = 10, dpi = 350)
   
+  
+  ### Reviewer #1 Comment #4
+  ### expression of LSK/Flt3+/CD150+/CD48-
+  p <- FeaturePlot(Updated_Seurat_Obj, features = c("Flt3"), cols = c("lightgray", "red"), raster = TRUE)
+  
+  p2 <- DimPlot(object = Updated_Seurat_Obj, reduction = "umap", raster = TRUE,
+                group.by = "Development",
+                pt.size = 1)
+  
+  p3 <- DimPlot(object = Updated_Seurat_Obj, reduction = "umap", raster = TRUE,
+                group.by = "HSPC",
+                pt.size = 1)
+  
+  p4 <- DimPlot(object = Updated_Seurat_Obj, reduction = "umap", raster = TRUE,
+                group.by = "Tissue",
+                pt.size = 1)
+  
+  g <- arrangeGrob(grobs = list(p, p2, p3, p4),
+                   nrow = 2,
+                   ncol = 2,
+                   top = "")
+  ggsave(paste0(outputDir, "R1C4_UMAP_Flt3(2).png"), plot = g, width = 12, height = 10, dpi = 350)
+  
+  ### Flt3 expression of LTHSC only - E16.5, E18.5, P0, & Adult
+  LTHSC_obj <- subset(Updated_Seurat_Obj,
+                      cells = rownames(Updated_Seurat_Obj@meta.data)[which(Updated_Seurat_Obj$HSPC == "LTHSC")])
+  LTHSC_obj$Development <- factor(LTHSC_obj$Development, levels = c("E16", "E18", "P0", "ADULT"))
+  
+  p <- vector("list", length(levels(LTHSC_obj$Development)))
+  names(p) <- levels(LTHSC_obj$Development)
+  for(tp in levels(LTHSC_obj$Development)) {
+    sub_tp_obj <- subset(LTHSC_obj,
+                         cells = rownames(LTHSC_obj@meta.data)[which(LTHSC_obj$Development == tp)])
+    p[[tp]] <- FeaturePlot(sub_tp_obj, features = c("Flt3"), cols = c("lightgray", "red"), raster = FALSE,
+                           pt.size = 5, order = TRUE, keep.scale = NULL) +
+      ggtitle(tp) +
+      labs(col="Flt3 Exp")
+  }
+  
+  g <- arrangeGrob(grobs = p,
+                   nrow = 2,
+                   ncol = 2,
+                   top = "")
+  ggsave(paste0(outputDir, "R1C4_UMAP_Flt3_LTHSC.png"), plot = g, width = 12, height = 10, dpi = 350)
+  
+  
+  ### seurat integrate - heme/stroma separately
+  subset_jardine_obj <- subset(jardine_seurat2,
+                               cells = rownames(jardine_seurat2@meta.data)[which(jardine_seurat2$broad_fig1_cell.labels %in% c("HSC/MPP and pro", "stroma"))])
+  subset_our_obj7 <- subset(Updated_Seurat_Obj,
+                            cells = rownames(Updated_Seurat_Obj@meta.data)[which(Updated_Seurat_Obj$New_HSPC %in% c("HSPC", "Stroma"))])
+  
+  ### Heme
+  subset_heme_jardine_obj <- subset(jardine_seurat2,
+                                    cells = rownames(jardine_seurat2@meta.data)[which(jardine_seurat2$broad_fig1_cell.labels %in% c("HSC/MPP and pro"))])
+  subset_heme_our_obj7 <- subset(Updated_Seurat_Obj,
+                                 cells = rownames(Updated_Seurat_Obj@meta.data)[which(Updated_Seurat_Obj$New_HSPC %in% c("HSPC"))])
+  
+  ### change subset_heme_jardine_obj to mouse seurat object
+  subset_heme_jardine_obj_mouse <- convert_human_seu_to_mouse(subset_heme_jardine_obj)
+  
+  ### select features that are repeatedly variable across datasets for integration
+  features <- SelectIntegrationFeatures(object.list = list(subset_heme_our_obj7, subset_heme_jardine_obj_mouse))
+  
+  ### find anchors between the two objects
+  heme.anchors <- FindIntegrationAnchors(object.list = list(subset_heme_our_obj7, subset_heme_jardine_obj_mouse), anchor.features = features)
+  
+  ### combined object
+  heme.combined <- IntegrateData(anchorset = heme.anchors)
+  
+  ### set the default assay
+  DefaultAssay(heme.combined) <- "integrated"
+  
+  ### preprocess the combined data
+  heme.combined <- ScaleData(heme.combined, verbose = FALSE)
+  heme.combined <- RunPCA(heme.combined, npcs = 30, verbose = FALSE)
+  ElbowPlot(heme.combined, ndims = 15, reduction = "pca")
+  heme.combined <- RunUMAP(heme.combined, reduction = "pca", dims = 1:15)
+  heme.combined <- FindNeighbors(heme.combined, reduction = "pca", dims = 1:15)
+  heme.combined <- FindClusters(heme.combined, resolution = 0.5)
+  
+  ### cell annotation
+  heme.combined$Combined_Anno <- heme.combined$New_Anno
+  heme.combined$Combined_Anno[which(is.na(heme.combined$New_Anno))] <- heme.combined$broad_fig1_cell.labels[which(is.na(heme.combined$New_Anno))]
+  heme.combined$Combined_Anno[which(heme.combined$Combined_Anno == "HSC/MPP and pro")] <- "JARDINE_HSPC"
+  heme.combined$Combined_Anno[which(heme.combined$Combined_Anno == "stroma")] <- "JARDINE_Stroma"
+  heme.combined$Combined_Anno <- factor(heme.combined$Combined_Anno, levels = c("E16_HSPC", "E18_HSPC", "P0_HSPC", "ADULT_HSPC", "JARDINE_HSPC"))
+  
+  ### UMAP
+  p <- DimPlot(object = heme.combined, reduction = "umap", raster = FALSE,
+               group.by = "Combined_Anno",
+               pt.size = 1,
+               order = rev(levels(heme.combined$Combined_Anno))) +
+    ggtitle(paste0("Anchor Combined UMAP - Heme")) +
+    labs(color = "Annotation") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 24, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  ggsave(paste0(outputDir, "UMAP_Anchor_Combined_Heme.png"), plot = p, width = 20, height = 10, dpi = 350)
+  
+  
+  ### Stroma
+  subset_stroma_jardine_obj <- subset(jardine_seurat2,
+                                      cells = rownames(jardine_seurat2@meta.data)[which(jardine_seurat2$broad_fig1_cell.labels %in% c("stroma"))])
+  subset_stroma_our_obj7 <- subset(Updated_Seurat_Obj,
+                                   cells = rownames(Updated_Seurat_Obj@meta.data)[which(Updated_Seurat_Obj$New_HSPC %in% c("Stroma"))])
+  
+  ### change subset_stroma_jardine_obj to mouse seurat object
+  subset_stroma_jardine_obj_mouse <- convert_human_seu_to_mouse(subset_stroma_jardine_obj)
+  
+  ### select features that are repeatedly variable across datasets for integration
+  features <- SelectIntegrationFeatures(object.list = list(subset_stroma_our_obj7, subset_stroma_jardine_obj_mouse))
+  
+  ### find anchors between the two objects
+  stroma.anchors <- FindIntegrationAnchors(object.list = list(subset_stroma_our_obj7, subset_stroma_jardine_obj_mouse), anchor.features = features)
+  
+  ### combined object
+  stroma.combined <- IntegrateData(anchorset = stroma.anchors)
+  
+  ### set the default assay
+  DefaultAssay(stroma.combined) <- "integrated"
+  
+  ### preprocess the combined data
+  stroma.combined <- ScaleData(stroma.combined, verbose = FALSE)
+  stroma.combined <- RunPCA(stroma.combined, npcs = 30, verbose = FALSE)
+  ElbowPlot(stroma.combined, ndims = 15, reduction = "pca")
+  stroma.combined <- RunUMAP(stroma.combined, reduction = "pca", dims = 1:15)
+  stroma.combined <- FindNeighbors(stroma.combined, reduction = "pca", dims = 1:15)
+  stroma.combined <- FindClusters(stroma.combined, resolution = 0.5)
+  
+  ### cell annotation
+  stroma.combined$Combined_Anno <- stroma.combined$New_Anno
+  stroma.combined$Combined_Anno[which(is.na(stroma.combined$New_Anno))] <- stroma.combined$broad_fig1_cell.labels[which(is.na(stroma.combined$New_Anno))]
+  stroma.combined$Combined_Anno[which(stroma.combined$Combined_Anno == "HSC/MPP and pro")] <- "JARDINE_HSPC"
+  stroma.combined$Combined_Anno[which(stroma.combined$Combined_Anno == "stroma")] <- "JARDINE_Stroma"
+  stroma.combined$Combined_Anno <- factor(stroma.combined$Combined_Anno, levels = c("E16_Stroma", "E18_Stroma", "P0_Stroma", "ADULT_Stroma", "JARDINE_Stroma"))
+  
+  ### UMAP
+  p <- DimPlot(object = stroma.combined, reduction = "umap", raster = FALSE,
+               group.by = "Combined_Anno",
+               pt.size = 1,
+               order = rev(levels(stroma.combined$Combined_Anno))) +
+    ggtitle(paste0("Anchor Combined UMAP - Stroma")) +
+    labs(color = "Annotation") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 24, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  ggsave(paste0(outputDir, "UMAP_Anchor_Combined_Stroma.png"), plot = p, width = 20, height = 10, dpi = 350)
   
   
   
