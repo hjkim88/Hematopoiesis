@@ -3195,6 +3195,158 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   ggsave(paste0(outputDir, "UMAP_Anchor_Combined_Stroma.png"), plot = p, width = 20, height = 10, dpi = 350)
   
   
+  ### load the Excel file and run t-test & wilcoxon test
+  ### tell Trent that we can put * - search for the functions
+  stat_excel_path <- "./data/NCB Appeal Stats.xlsx"
+  sheetNum <- length(getSheets(loadWorkbook(stat_excel_path)))-1
+  
+  ncb_stats <- vector("list", sheetNum)
+  result_mat <- vector("list", sheetNum)
+  for(i in 2:(sheetNum+1)) {
+    ncb_stats[[i-1]] <- read.xlsx(file = stat_excel_path, sheetIndex = i,
+                                  stringsAsFactors = FALSE, check.names = FALSE)
+    
+    result_mat[[i-1]] <- vector("list", 2)
+    names(result_mat[[i-1]]) <- c("t-test", "wilcoxon")
+    
+    if(i == 9) {
+      unique_hspc <- unique(colnames(ncb_stats[[i-1]]))
+      unique_tp <- unique(as.character(ncb_stats[[i-1]][1,]))
+      
+      ### t-test
+      result_mat[[i-1]][[1]] <- vector("list", length(unique_hspc) + length(unique_tp))
+      names(result_mat[[i-1]][[1]]) <- c(unique_hspc, unique_tp)
+      
+      for(j in 1:length(unique_hspc)) {
+        result_mat[[i-1]][[1]][[j]] <- matrix(NA, nrow = length(unique_tp), ncol = length(unique_tp))
+        rownames(result_mat[[i-1]][[1]][[j]]) <- unique_tp
+        colnames(result_mat[[i-1]][[1]][[j]]) <- unique_tp
+        
+        hspc_idx <- which(colnames(ncb_stats[[i-1]]) == unique_hspc[j])
+        
+        for(row in unique_tp) {
+          for(col in unique_tp) {
+            result_mat[[i-1]][[1]][[j]][row,col] <- t.test(as.numeric(ncb_stats[[i-1]][-1,intersect(hspc_idx,
+                                                                                                    which(as.character(ncb_stats[[i-1]][1,]) == row))]),
+                                                           as.numeric(ncb_stats[[i-1]][-1,intersect(hspc_idx,
+                                                                                                    which(as.character(ncb_stats[[i-1]][1,]) == col))]))$p.value
+          }
+        }
+      }
+      
+      for(j in (length(unique_hspc)+1):length(result_mat[[i-1]][[1]])) {
+        result_mat[[i-1]][[1]][[j]] <- matrix(NA, nrow = length(unique_hspc), ncol = length(unique_hspc))
+        rownames(result_mat[[i-1]][[1]][[j]]) <- unique_hspc
+        colnames(result_mat[[i-1]][[1]][[j]]) <- unique_hspc
+        
+        tp_idx <- which(as.character(ncb_stats[[i-1]][1,]) == unique_tp[j-length(unique_hspc)])
+        
+        for(row in unique_hspc) {
+          for(col in unique_hspc) {
+            result_mat[[i-1]][[1]][[j]][row,col] <- t.test(as.numeric(ncb_stats[[i-1]][-1,intersect(tp_idx,
+                                                                                                    which(colnames(ncb_stats[[i-1]]) == row))]),
+                                                           as.numeric(ncb_stats[[i-1]][-1,intersect(tp_idx,
+                                                                                                    which(colnames(ncb_stats[[i-1]]) == col))]))$p.value
+          }
+        }
+      }
+      
+      ### wilcoxon
+      result_mat[[i-1]][[2]] <- vector("list", length(unique_hspc) + length(unique_tp))
+      names(result_mat[[i-1]][[2]]) <- c(unique_hspc, unique_tp)
+      
+      for(j in 1:length(unique_hspc)) {
+        result_mat[[i-1]][[2]][[j]] <- matrix(NA, nrow = length(unique_tp), ncol = length(unique_tp))
+        rownames(result_mat[[i-1]][[2]][[j]]) <- unique_tp
+        colnames(result_mat[[i-1]][[2]][[j]]) <- unique_tp
+        
+        hspc_idx <- which(colnames(ncb_stats[[i-1]]) == unique_hspc[j])
+        
+        for(row in unique_tp) {
+          for(col in unique_tp) {
+            result_mat[[i-1]][[2]][[j]][row,col] <- wilcox.test(as.numeric(ncb_stats[[i-1]][-1,intersect(hspc_idx,
+                                                                                                         which(as.character(ncb_stats[[i-1]][1,]) == row))]),
+                                                                as.numeric(ncb_stats[[i-1]][-1,intersect(hspc_idx,
+                                                                                                         which(as.character(ncb_stats[[i-1]][1,]) == col))]))$p.value
+          }
+        }
+      }
+      
+      for(j in (length(unique_hspc)+1):length(result_mat[[i-1]][[2]])) {
+        result_mat[[i-1]][[2]][[j]] <- matrix(NA, nrow = length(unique_hspc), ncol = length(unique_hspc))
+        rownames(result_mat[[i-1]][[2]][[j]]) <- unique_hspc
+        colnames(result_mat[[i-1]][[2]][[j]]) <- unique_hspc
+        
+        tp_idx <- which(as.character(ncb_stats[[i-1]][1,]) == unique_tp[j-length(unique_hspc)])
+        
+        for(row in unique_hspc) {
+          for(col in unique_hspc) {
+            result_mat[[i-1]][[2]][[j]][row,col] <- wilcox.test(as.numeric(ncb_stats[[i-1]][-1,intersect(tp_idx,
+                                                                                                         which(colnames(ncb_stats[[i-1]]) == row))]),
+                                                                as.numeric(ncb_stats[[i-1]][-1,intersect(tp_idx,
+                                                                                                         which(colnames(ncb_stats[[i-1]]) == col))]))$p.value
+          }
+        }
+      }
+    } else {
+      na_col_idx <- which(colnames(ncb_stats[[i-1]]) == "NA")
+      
+      if(length(na_col_idx) > 0) {
+        ncb_stats[[i-1]] <- ncb_stats[[i-1]][,-na_col_idx]
+      }
+      
+      ### t-test
+      result_mat[[i-1]][[1]] <- matrix(NA, nrow = ncol(ncb_stats[[i-1]]), ncol = ncol(ncb_stats[[i-1]]))
+      rownames(result_mat[[i-1]][[1]]) <- colnames(ncb_stats[[i-1]])
+      colnames(result_mat[[i-1]][[1]]) <- colnames(ncb_stats[[i-1]])
+      
+      for(row in colnames(ncb_stats[[i-1]])) {
+        for(col in colnames(ncb_stats[[i-1]])) {
+          result_mat[[i-1]][[1]][row,col] <- t.test(as.numeric(ncb_stats[[i-1]][,row]),
+                                                    as.numeric(ncb_stats[[i-1]][,col]))$p.value
+        }
+      }
+      
+      ### wilcoxon
+      result_mat[[i-1]][[2]] <- matrix(NA, nrow = ncol(ncb_stats[[i-1]]), ncol = ncol(ncb_stats[[i-1]]))
+      rownames(result_mat[[i-1]][[2]]) <- colnames(ncb_stats[[i-1]])
+      colnames(result_mat[[i-1]][[2]]) <- colnames(ncb_stats[[i-1]])
+      
+      for(row in colnames(ncb_stats[[i-1]])) {
+        for(col in colnames(ncb_stats[[i-1]])) {
+          result_mat[[i-1]][[2]][row,col] <- wilcox.test(as.numeric(ncb_stats[[i-1]][,row]),
+                                                         as.numeric(ncb_stats[[i-1]][,col]))$p.value
+        }
+      }
+    }
+  }
+  
+  ### write out the results
+  ### t-test
+  for(i in 1:length(result_mat)) {
+    if(i == 8) {
+      for(j in 1:length(result_mat[[i]][[1]])) {
+        write.xlsx(result_mat[[i]][[1]][[j]], file = paste0(outputDir, "statistics_tables_t-test.xlsx"),
+                   sheetName = paste0(i, "_", names(result_mat[[i]][[1]])[j]), append = TRUE)
+      }
+    } else {
+      write.xlsx(result_mat[[i]][[1]], file = paste0(outputDir, "statistics_tables_t-test.xlsx"),
+                 sheetName = paste0(i), append = TRUE)
+    }
+  }
+  ### wilcoxon
+  for(i in 1:length(result_mat)) {
+    if(i == 8) {
+      for(j in 1:length(result_mat[[i]][[2]])) {
+        write.xlsx(result_mat[[i]][[2]][[j]], file = paste0(outputDir, "statistics_tables_wilcoxon.xlsx"),
+                   sheetName = paste0(i, "_", names(result_mat[[i]][[2]])[j]), append = TRUE)
+      }
+    } else {
+      write.xlsx(result_mat[[i]][[2]], file = paste0(outputDir, "statistics_tables_wilcoxon.xlsx"),
+                 sheetName = paste0(i), append = TRUE)
+    }
+  }
+  
   
   
 }
