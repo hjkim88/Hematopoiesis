@@ -291,8 +291,8 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   ### Basic function to convert human to mouse gene names
   convertHumanGeneList <- function(x){
     require("biomaRt")
-    human = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
-    mouse = useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+    human = useMart("ensembl", dataset = "hsapiens_gene_ensembl", host = "https://dec2021.archive.ensembl.org/")
+    mouse = useMart("ensembl", dataset = "mmusculus_gene_ensembl", host = "https://dec2021.archive.ensembl.org/")
     genesV2 = getLDS(attributes = c("hgnc_symbol"), filters = "hgnc_symbol", values = x , mart = human, attributesL = c("mgi_symbol"), martL = mouse, uniqueRows=T)
     humanx <- unique(genesV2[, 2])
     
@@ -1672,6 +1672,14 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
                                       logfc.threshold = 0.2,
                                       test.use = "wilcox")
   
+  ### write out the DE result
+  write.xlsx(data.frame(Gene=rownames(jardine_de_result),
+                        jardine_de_result,
+                        stringsAsFactors = FALSE, check.names = FALSE),
+             file = paste0(outputDir, "Jardine_FindAllMarkers.xlsx"),
+             sheetName = paste0("Jardine_DE_Results"),
+             row.names = FALSE)
+  
   ### ours from E16, E18, and P0 EXCLUDE THE ADULTS
   subset_our_obj4 <- subset(Updated_Seurat_Obj,
                             cells = rownames(Updated_Seurat_Obj@meta.data)[intersect(which(Updated_Seurat_Obj$New_HSPC %in% c("HSPC")),
@@ -1709,6 +1717,14 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
                                   min.pct = 0.2,
                                   logfc.threshold = 0.2,
                                   test.use = "wilcox")
+  
+  ### write out the DE result
+  write.xlsx(data.frame(Gene=rownames(our_de_result),
+                        our_de_result,
+                        stringsAsFactors = FALSE, check.names = FALSE),
+             file = paste0(outputDir, "Ours_Without_Adult_FindAllMarkers.xlsx"),
+             sheetName = paste0("Ours_Without_Adult_DE_Results"),
+             row.names = FALSE)
   
   ### now compare DE genes between Jardine and Ours
   similarity_mat <- matrix(0, nrow = length(levels(jardine_de_result$cluster)), ncol = length(levels(our_de_result$cluster)))
@@ -2192,6 +2208,14 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
                                       min.pct = 0.2,
                                       logfc.threshold = 0.2,
                                       test.use = "wilcox")
+  
+  ### write out the DE result
+  write.xlsx(data.frame(Gene=rownames(our_de_result_all),
+                        our_de_result_all,
+                        stringsAsFactors = FALSE, check.names = FALSE),
+             file = paste0(outputDir, "Ours_All_FindAllMarkers.xlsx"),
+             sheetName = paste0("Ours_All_DE_Results"),
+             row.names = FALSE)
   
   ### now compare DE genes between Jardine and Ours
   similarity_mat3 <- matrix(0, nrow = length(levels(jardine_de_result$cluster)), ncol = length(levels(our_de_result_all$cluster)))
@@ -3346,6 +3370,68 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
                  sheetName = paste0(i), append = TRUE)
     }
   }
+  
+  ###
+  ### get similar genes between ours and Jardine's based on clusters
+  ###
+  
+  ### now compare DE genes between Jardine and Ours (without adults)
+  similarity_mat4 <- matrix("", nrow = length(levels(jardine_de_result$cluster)), ncol = length(levels(our_de_result$cluster)))
+  rownames(similarity_mat4) <- paste0("Jardine_", levels(jardine_de_result$cluster))
+  colnames(similarity_mat4) <- paste0("Ours_", levels(our_de_result$cluster))
+  similarity_mat4 <- data.frame(similarity_mat4,
+                                stringsAsFactors = FALSE, check.names = FALSE)
+  
+  ### calculate common DE genes - Jaccard Similarity (adjuated pv < 0.05)
+  for(clstr1 in levels(jardine_de_result$cluster)) {
+    for(clstr2 in levels(our_de_result$cluster)) {
+      jardine_target_genes <- jardine_de_result$gene[intersect(which(jardine_de_result$p_val_adj < 0.05),
+                                                               which(jardine_de_result$cluster == clstr1))]
+      jardine_target_genes <- convertHumanGeneList(jardine_target_genes)
+      our_target_genes <- our_de_result$gene[intersect(which(our_de_result$p_val_adj < 0.05),
+                                                       which(our_de_result$cluster == clstr2))]
+      
+      similarity_mat4[paste0("Jardine_", clstr1),paste0("Ours_", clstr2)] <- paste(intersect(jardine_target_genes, our_target_genes), collapse = ",")
+    }
+  }
+  
+  ### write out the sim mat
+  write.xlsx2(data.frame(Cluster=rownames(similarity_mat4),
+                         similarity_mat4,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "Shared_DE_Genes_Between_Jardine_And_Ours.xlsx"),
+              sheetName = paste0("Shared_DE_Genes"),
+              row.names = FALSE)
+  
+  ### now compare DE genes between Jardine and Ours (with adults - all)
+  similarity_mat5 <- matrix("", nrow = length(levels(jardine_de_result$cluster)), ncol = length(levels(our_de_result_all$cluster)))
+  rownames(similarity_mat5) <- paste0("Jardine_", levels(jardine_de_result$cluster))
+  colnames(similarity_mat5) <- paste0("Ours_", levels(our_de_result_all$cluster))
+  similarity_mat5 <- data.frame(similarity_mat5,
+                                stringsAsFactors = FALSE, check.names = FALSE)
+  
+  ### calculate common DE genes - Jaccard Similarity (adjuated pv < 0.05)
+  for(clstr1 in levels(jardine_de_result$cluster)) {
+    for(clstr2 in levels(our_de_result_all$cluster)) {
+      jardine_target_genes <- jardine_de_result$gene[intersect(which(jardine_de_result$p_val_adj < 0.05),
+                                                               which(jardine_de_result$cluster == clstr1))]
+      jardine_target_genes <- convertHumanGeneList(jardine_target_genes)
+      our_target_genes <- our_de_result_all$gene[intersect(which(our_de_result_all$p_val_adj < 0.05),
+                                                           which(our_de_result_all$cluster == clstr2))]
+      
+      similarity_mat5[paste0("Jardine_", clstr1),paste0("Ours_", clstr2)] <- paste(intersect(jardine_target_genes, our_target_genes), collapse = ",")
+    }
+  }
+  
+  ### write out the sim mat
+  write.xlsx2(data.frame(Cluster=rownames(similarity_mat5),
+                         similarity_mat5,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "Shared_DE_Genes_Between_Jardine_And_Ours_All.xlsx"),
+              sheetName = paste0("Shared_DE_Genes"),
+              row.names = FALSE)
+  
+  
   
   
   
