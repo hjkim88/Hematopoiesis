@@ -1077,7 +1077,8 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj2.RDS",
   })
   sapply(levels(WJ_Seurat_Obj$Development), function(x) {
     return(round(100 * length(intersect(which(WJ_Seurat_Obj$Development == x),
-                                        which(WJ_Seurat_Obj$computational_annotation == "Adipo-CAR"))) / length(which(WJ_Seurat_Obj$Development == x)),3))
+                                        which(WJ_Seurat_Obj$computational_annotation == "Adipo-CAR"))) / length(intersect(which(WJ_Seurat_Obj$Development == x),
+                                                                                                                          which(WJ_Seurat_Obj$Cell1 == "Stroma"))),3))
   })
   
   ### draw bar plots
@@ -1088,7 +1089,8 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj2.RDS",
                         }),
                         CAR_Cell_Pcnt=sapply(levels(WJ_Seurat_Obj$Development), function(x) {
                           return(round(100 * length(intersect(which(WJ_Seurat_Obj$Development == x),
-                                                              which(WJ_Seurat_Obj$computational_annotation == "Adipo-CAR"))) / length(which(WJ_Seurat_Obj$Development == x)),3))
+                                                              which(WJ_Seurat_Obj$computational_annotation == "Adipo-CAR"))) / length(intersect(which(WJ_Seurat_Obj$Development == x),
+                                                                                                                                                which(WJ_Seurat_Obj$Cell1 == "Stroma"))),3))
                         }),
                         stringsAsFactors = FALSE, check.names = FALSE)
   plot_df$Time <- factor(plot_df$Time, levels = levels(WJ_Seurat_Obj$Development))
@@ -1257,6 +1259,157 @@ wenjun_analysis <- function(Seurat_Obj_Path="./data/Wenjun_Seurat_Obj2.RDS",
                             Computational_Annotation=WJ_Seurat_Obj$computational_annotation,
                             stringsAsFactors = FALSE, check.names = FALSE)
   write.csv(category_df, file = paste0("./data/loupe_category.csv"), row.names = FALSE)
+  
+  
+  # ### make more clusters
+  # WJ_Seurat_Obj <- FindClusters(WJ_Seurat_Obj, resolution = 1)
+  # 
+  # DimPlot(object = WJ_Seurat_Obj, reduction = "umap", raster = TRUE,
+  #         group.by = "seurat_clusters",
+  #         pt.size = 1)
+  # 
+  # ### find markers
+  # WJ_Seurat_Obj <- SetIdent(object = WJ_Seurat_Obj,
+  #                           cells = rownames(WJ_Seurat_Obj@meta.data),
+  #                           value = WJ_Seurat_Obj$seurat_clusters)
+  # de_result_all <- FindAllMarkers(WJ_Seurat_Obj,
+  #                                 min.pct = 0.2,
+  #                                 logfc.threshold = 0.2,
+  #                                 test.use = "wilcox")
+  # 
+  # ### write out the DE result
+  # write.xlsx2(data.frame(Gene=rownames(de_result_all),
+  #                        de_result_all,
+  #                        stringsAsFactors = FALSE, check.names = FALSE),
+  #             file = paste0(outputDir, "/Wenjun_Cluster_AllMarkers_res1.xlsx"),
+  #             sheetName = "Wenjun_Cluster_AllMarkers", row.names = FALSE)
+  
+  ###
+  ### Mouse HSC: EMCN+, CD34lo/-, SCA-1+, Thy1.1+/lo, CD38+, C-kit+, lin-
+  ### Human HSC: EMCN+, CD34+, CD59+, Thy1/CD90+, CD38lo/-, C-kit/CD117+, lin-
+  ### LT-HSC: CD34-, CD38-, SCA-1+, Thy1.1+/lo, C-kit+, lin-, CD135-, Slamf1/CD150+
+  ### ST-HSC: CD34+, CD38+, SCA-1+, Thy1.1+/lo, C-kit+, lin-, CD135-, Slamf1/CD150+, Mac-1 (CD11b)lo
+  ### Early MPP: CD34+, SCA-1+, Thy1.1-, C-kit+, lin-, CD135+, Slamf1/CD150-, Mac-1 (CD11b)lo, CD4lo
+  ### Late MPP: CD34+, SCA-1+, Thy1.1-, C-kit+, lin-, CD135high, Slamf1/CD150-, Mac-1 (CD11b)lo, CD4lo
+  ###
+  
+  
+  ### divide CAR cells into Adipo-CAR	and Osteo-CAR
+  car_obj <- subset(WJ_Seurat_Obj,
+                    cells = rownames(WJ_Seurat_Obj@meta.data)[which(WJ_Seurat_Obj$computational_annotation == "Adipo-CAR")])
+  
+  ### find variable genes
+  car_obj <- FindVariableFeatures(car_obj,
+                                  selection.method = "vst", nfeatures = 2000)
+  
+  ### scaling
+  car_obj <- ScaleData(car_obj,
+                       vars.to.regress = c("percent.mt", "S.Score", "G2M.Score"))
+  
+  ### PCA
+  car_obj <- RunPCA(car_obj,
+                    features = VariableFeatures(object = car_obj), npcs = 20)
+  ElbowPlot(car_obj, ndims = 20, reduction = "pca")
+  
+  ### UMAP
+  car_obj <- RunUMAP(car_obj, dims = 1:20)
+  
+  ### clustering
+  car_obj <- FindNeighbors(car_obj, dims = 1:20)
+  car_obj <- FindClusters(car_obj, resolution = 0.4)
+  
+  ### see the clusters on UMAP
+  DimPlot(object = car_obj, reduction = "umap", raster = FALSE,
+          group.by = "seurat_clusters",
+          pt.size = 2)
+  
+  ### find markers
+  car_obj <- SetIdent(object = car_obj,
+                      cells = rownames(car_obj@meta.data),
+                      value = car_obj$seurat_clusters)
+  de_result_car <- FindAllMarkers(car_obj,
+                                  min.pct = 0.2,
+                                  logfc.threshold = 0.2,
+                                  test.use = "wilcox")
+  
+  write.xlsx2(data.frame(Gene=rownames(de_result_car),
+                         de_result_car,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "/Wenjun_Cluster_AllMarkers_car.xlsx"),
+              sheetName = "Wenjun_Cluster_AllMarkers", row.names = FALSE)
+  
+  ### number of DE genes by FDR in each cluster
+  p.adj.tresh <- 1E-10
+  sapply(unique(de_result_car$cluster), function(x) {
+    return(length(intersect(which(de_result_car$cluster == x),
+                            which(de_result_car$p_val_adj < p.adj.tresh))))
+  }, USE.NAMES = TRUE)
+  
+  ### see the shared markers
+  ### calculate jaccard index between clusters and cell types
+  car_jaccard_mat <- matrix(0, nrow = length(unique(de_result_car$cluster)), ncol = length(ref_anno_list))
+  rownames(car_jaccard_mat) <- unique(de_result_car$cluster)
+  colnames(car_jaccard_mat) <- names(ref_anno_list)
+  car_pos_jaccard_mat <- matrix(0, nrow = length(unique(de_result_car$cluster)), ncol = length(ref_anno_list))
+  rownames(car_pos_jaccard_mat) <- unique(de_result_car$cluster)
+  colnames(car_pos_jaccard_mat) <- names(ref_anno_list)
+  for(clstr in rownames(car_jaccard_mat)) {
+    for(cell_type in colnames(car_jaccard_mat)) {
+      clstr_markers <- de_result_car$gene[intersect(which(de_result_car$cluster == clstr),
+                                                    which(de_result_car$p_val_adj < p.adj.tresh))]
+      # clstr_markers <- de_result_car$gene[which(de_result_car$cluster == clstr)][1:50]
+      clstr_pos_markers <- intersect(clstr_markers,
+                                     de_result_car$gene[which(de_result_car$avg_log2FC > 0)])
+      cell_type_markers <- ref_anno_list[[cell_type]]
+      car_jaccard_mat[clstr,cell_type] <- cal_jaccard(clstr_markers, cell_type_markers)
+      car_pos_jaccard_mat[clstr,cell_type] <- cal_jaccard(clstr_pos_markers, cell_type_markers)
+    }
+  }
+  
+  ### first, second, third guess
+  car_guessing <- sapply(rownames(car_jaccard_mat), function(x) {
+    temp_row <- car_jaccard_mat[x,]
+    temp_row <- temp_row[order(-temp_row)]
+    return(names(temp_row)[1:3])
+  })
+  
+  car_pos_guessing <- sapply(rownames(car_pos_jaccard_mat), function(x) {
+    temp_row <- car_pos_jaccard_mat[x,]
+    temp_row <- temp_row[order(-temp_row)]
+    return(names(temp_row)[1:3])
+  })
+  
+  ### computational annotation
+  ### cluster 4 is shared but should be Heme cells
+  ### Anyway both Heme & Stroma cluster 4 indicates the same cell type, so no problem
+  WJ_Seurat_Obj$computational_annotation <- NA
+  for(clstr in colnames(stroma_guessing)) {
+    WJ_Seurat_Obj$computational_annotation[which(WJ_Seurat_Obj$seurat_clusters == clstr)] <- stroma_guessing[1,clstr]
+  }
+  for(clstr in colnames(heme_guessing)) {
+    WJ_Seurat_Obj$computational_annotation[which(WJ_Seurat_Obj$seurat_clusters == clstr)] <- heme_guessing[1,clstr]
+  }
+  
+  ### UMAP plot with new computational annotation
+  p <- DimPlot(object = WJ_Seurat_Obj, reduction = "umap", raster = TRUE,
+               group.by = "computational_annotation",
+               pt.size = 1) +
+    ggtitle(paste0("Annotated Cell Types")) +
+    labs(color = "Annotation") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 24, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  
+  
+  
+  
+  
+  
   
   
   
