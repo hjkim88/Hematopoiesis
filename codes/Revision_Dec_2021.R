@@ -113,8 +113,8 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   ### Basic function to convert human to mouse gene names
   convertHumanGeneList <- function(x){
     require("biomaRt")
-    human = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
-    mouse = useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+    human = useMart("ensembl", dataset = "hsapiens_gene_ensembl", host = "https://dec2021.archive.ensembl.org/")
+    mouse = useMart("ensembl", dataset = "mmusculus_gene_ensembl", host = "https://dec2021.archive.ensembl.org/")
     genesV2 = getLDS(attributes = c("hgnc_symbol"), filters = "hgnc_symbol", values = x , mart = human, attributesL = c("mgi_symbol"), martL = mouse, uniqueRows=T)
     humanx <- unique(genesV2[, 2])
     
@@ -3430,6 +3430,333 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
               file = paste0(outputDir, "Shared_DE_Genes_Between_Jardine_And_Ours_All.xlsx"),
               sheetName = paste0("Shared_DE_Genes"),
               row.names = FALSE)
+  
+  ###
+  ### Shannon wants to see DE/GO comparison of Jardine and our E16, E18, P0, and Adult separately
+  ###
+  
+  ### load reference annotation file
+  ref_anno <- read.xlsx2(file = paste0("./data/Chiara_Baccin_NCB_2019_marker_gene.xlsx"),
+                         sheetIndex = 1,
+                         stringsAsFactors = FALSE, check.names = FALSE)
+  ref_anno_list <- apply(ref_anno, 2, function(x) {
+    y <- x
+    y <- y[which(y != "")]
+    return(y)
+  })
+  
+  ### jacard index
+  cal_jaccard <- function(x, y) {
+    return(length(intersect(x, y)) / length(union(x, y)))
+  }
+  
+  ### computational annotation function
+  computationally_annotate <- function(input_seurat_obj, ref_anno_list,
+                                       input_de_result, de_species = c("mouse", "human"),
+                                       de_p_val = 0.05, de_direction = c("positive", "all")) {
+    
+    ### see the shared markers
+    ### calculate jaccard index between clusters and cell types
+    temp_jaccard_mat <- matrix(0, nrow = length(unique(input_de_result$cluster)), ncol = length(ref_anno_list))
+    rownames(temp_jaccard_mat) <- unique(input_de_result$cluster)
+    colnames(temp_jaccard_mat) <- names(ref_anno_list)
+    temp_pos_jaccard_mat <- matrix(0, nrow = length(unique(input_de_result$cluster)), ncol = length(ref_anno_list))
+    rownames(temp_pos_jaccard_mat) <- unique(input_de_result$cluster)
+    colnames(temp_pos_jaccard_mat) <- names(ref_anno_list)
+    for(clstr in rownames(temp_jaccard_mat)) {
+      for(cell_type in colnames(temp_jaccard_mat)) {
+        clstr_markers <- input_de_result$gene[intersect(which(input_de_result$cluster == clstr),
+                                                        which(input_de_result$p_val_adj < de_p_val))]
+        clstr_pos_markers <- intersect(clstr_markers,
+                                       input_de_result$gene[which(input_de_result$avg_log2FC > 0)])
+        
+        if(de_species[1] == "human") {
+          clstr_markers <- convertHumanGeneList(clstr_markers)
+          clstr_pos_markers <- convertHumanGeneList(clstr_pos_markers)
+        }
+        
+        cell_type_markers <- ref_anno_list[[cell_type]]
+        temp_jaccard_mat[clstr,cell_type] <- cal_jaccard(clstr_markers, cell_type_markers)
+        temp_pos_jaccard_mat[clstr,cell_type] <- cal_jaccard(clstr_pos_markers, cell_type_markers)
+      }
+    }
+    
+    ### first, second, third guess
+    temp_guessing <- sapply(rownames(temp_jaccard_mat), function(x) {
+      temp_row <- temp_jaccard_mat[x,]
+      temp_row <- temp_row[order(-temp_row)]
+      return(names(temp_row)[1:3])
+    })
+    
+    temp_pos_guessing <- sapply(rownames(temp_pos_jaccard_mat), function(x) {
+      temp_row <- temp_pos_jaccard_mat[x,]
+      temp_row <- temp_row[order(-temp_row)]
+      return(names(temp_row)[1:3])
+    })
+    
+    input_seurat_obj$computational_annotation <- NA
+    if(de_direction[1] == "positive") {
+      for(clstr in colnames(temp_pos_guessing)) {
+        input_seurat_obj$computational_annotation[which(input_seurat_obj$seurat_clusters == clstr)] <- temp_pos_guessing[1,clstr]
+      }
+    } else if(de_direction[1] == "all") {
+      for(clstr in colnames(temp_guessing)) {
+        input_seurat_obj$computational_annotation[which(input_seurat_obj$seurat_clusters == clstr)] <- temp_guessing[1,clstr]
+      }
+    } else {
+      writeLines(paste("ERROR"))
+    }
+    
+    return(input_seurat_obj)
+    
+  }
+  
+  ### load stringsAsFactors = FALSE, check.names = FALSE
+  jardine_de_result <- read.xlsx(file = paste0(outputDir, "Jardine_FindAllMarkers.xlsx"), sheetIndex = 1,
+                                 stringsAsFactors = FALSE, check.names = FALSE)
+  
+  ### computational annotation for jardine
+  subset_jardine_obj2 <- computationally_annotate(input_seurat_obj = subset_jardine_obj2,
+                                                  ref_anno_list = ref_anno_list,
+                                                  input_de_result = jardine_de_result,
+                                                  de_species = "human",
+                                                  de_p_val = 0.05,
+                                                  de_direction = "positive")
+  
+  result_df <- data.frame(Cluster=unique(subset_jardine_obj2$seurat_clusters),
+                          Computational_Annotation=sapply(unique(subset_jardine_obj2$seurat_clusters), function(x) {
+                            return(unique(subset_jardine_obj2$computational_annotation[which(subset_jardine_obj2$seurat_clusters == x)]))
+                          }, USE.NAMES = TRUE),
+                          stringsAsFactors = FALSE, check.names = FALSE)
+  write.xlsx(result_df, file = paste0(outputDir, "/050122/Cluster_Computational_Annotation_Jardine.xlsx"),
+             sheetName = paste0("Cluster_Computational_Annotation_Jardine"), row.names = FALSE)
+  
+  p <- DimPlot(object = subset_jardine_obj2, reduction = "umap", raster = TRUE,
+               group.by = "computational_annotation",
+               pt.size = 1) +
+    ggtitle(paste0("Annotated Cell Types")) +
+    labs(color = "Annotation") +
+    guides(colour = guide_legend(override.aes = list(size=10))) +
+    theme_classic(base_size = 48) +
+    theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+          axis.title = element_text(size = 36, color = "black", face = "bold"),
+          axis.text = element_text(size = 36, color = "black", face = "bold"),
+          legend.title = element_text(size = 24, color = "black", face = "bold"),
+          legend.text = element_text(size = 24, color = "black", face = "bold"),
+          axis.ticks = element_blank())
+  ggsave(paste0(outputDir, "/050122/UMAP_Computational_Annotation_Jardine.png"), plot = p, width = 20, height = 10, dpi = 350)
+  
+  
+  ### define our annotation specifically
+  ### Jardine's data should be all prepared - jardine_de_result, Jardine_Up_Go, Jardine_Down_Go
+  ### MPP/Stroma & E16, E18, and P0
+  Updated_Seurat_Obj$New_HSPC <- Updated_Seurat_Obj$HSPC
+  Updated_Seurat_Obj$New_HSPC[which(Updated_Seurat_Obj$New_HSPC %in% c("LTHSC", "STHSC", "MPP2", "MPP3", "MPP4"))] <- "HSPC"
+  Updated_Seurat_Obj$New_Anno <- paste0(Updated_Seurat_Obj$Development, "_", Updated_Seurat_Obj$New_HSPC)
+  for(tp in c("E16", "E18", "P0", "ADULT")) {
+    
+    ### create working directory
+    outputDir2 <- paste0(outputDir, "050122/", tp, "/")
+    dir.create(outputDir2, recursive = TRUE)
+    
+    ### ours ONLY WITH THE TP
+    temp_our_obj <- subset(Updated_Seurat_Obj,
+                              cells = rownames(Updated_Seurat_Obj@meta.data)[intersect(which(Updated_Seurat_Obj$New_HSPC %in% c("HSPC")),
+                                                                                       which(Updated_Seurat_Obj$Development == tp))])
+    
+    temp_our_obj <- FindVariableFeatures(temp_our_obj)
+    temp_our_obj <- ScaleData(temp_our_obj)
+    temp_our_obj <- RunPCA(temp_our_obj, npcs = 15)
+    ElbowPlot(temp_our_obj, ndims = 15, reduction = "pca")
+    temp_our_obj <- RunUMAP(temp_our_obj, dims = 1:15)
+    
+    temp_our_obj <- FindNeighbors(temp_our_obj, dims = 1:15)
+    temp_our_obj <- FindClusters(temp_our_obj, resolution = 0.6)
+    
+    p <- DimPlot(object = temp_our_obj, reduction = "umap", raster = TRUE,
+                 group.by = "seurat_clusters",
+                 pt.size = 1) +
+      ggtitle("") +
+      labs(color = "seurat_clusters") +
+      guides(colour = guide_legend(override.aes = list(size=10))) +
+      theme_classic(base_size = 48) +
+      theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+            axis.title = element_text(size = 36, color = "black", face = "bold"),
+            axis.text = element_text(size = 36, color = "black", face = "bold"),
+            legend.title = element_text(size = 24, color = "black", face = "bold"),
+            legend.text = element_text(size = 24, color = "black", face = "bold"),
+            axis.ticks = element_blank())
+    ggsave(paste0(outputDir2, "UMAP_Ours_HSPCs_", tp, ".png"), plot = p, width = 20, height = 10, dpi = 350)
+    
+    ### find all markers
+    temp_our_obj <- SetIdent(object = temp_our_obj,
+                                cells = rownames(temp_our_obj@meta.data),
+                                value = temp_our_obj$seurat_clusters)
+    our_de_result_temp <- FindAllMarkers(temp_our_obj,
+                                         min.pct = 0.1,
+                                         logfc.threshold = 0,
+                                         test.use = "wilcox")
+    
+    ### computational annotation
+    temp_our_obj <- computationally_annotate(input_seurat_obj = temp_our_obj,
+                                             ref_anno_list = ref_anno_list,
+                                             input_de_result = our_de_result_temp,
+                                             de_species = "mouse",
+                                             de_p_val = 0.05,
+                                             de_direction = "positive")
+    
+    result_df <- data.frame(Cluster=unique(temp_our_obj$seurat_clusters),
+                            Computational_Annotation=sapply(unique(temp_our_obj$seurat_clusters), function(x) {
+                              return(unique(temp_our_obj$computational_annotation[which(temp_our_obj$seurat_clusters == x)]))
+                            }, USE.NAMES = TRUE),
+                            stringsAsFactors = FALSE, check.names = FALSE)
+    write.xlsx(result_df, file = paste0(outputDir2, "/Cluster_Computational_Annotation_", tp, ".xlsx"),
+               sheetName = paste0("Cluster_Computational_Annotation", tp), row.names = FALSE)
+    
+    ### UMAP
+    p <- DimPlot(object = temp_our_obj, reduction = "umap", raster = TRUE,
+                 group.by = "computational_annotation",
+                 pt.size = 1) +
+      ggtitle(paste0("Annotated Cell Types")) +
+      labs(color = "Annotation") +
+      guides(colour = guide_legend(override.aes = list(size=10))) +
+      theme_classic(base_size = 48) +
+      theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+            axis.title = element_text(size = 36, color = "black", face = "bold"),
+            axis.text = element_text(size = 36, color = "black", face = "bold"),
+            legend.title = element_text(size = 24, color = "black", face = "bold"),
+            legend.text = element_text(size = 24, color = "black", face = "bold"),
+            axis.ticks = element_blank())
+    ggsave(paste0(outputDir2, "/UMAP_Computational_Annotation_Ours_", tp, ".png"), plot = p, width = 20, height = 10, dpi = 350)
+    
+    ### now compare DE genes between Jardine and Ours
+    similarity_mat_temp <- matrix(0, nrow = length(unique(jardine_de_result$cluster)), ncol = length(unique(our_de_result_temp$cluster)))
+    rownames(similarity_mat_temp) <- paste0("Jardine_", unique(jardine_de_result$cluster))
+    colnames(similarity_mat_temp) <- paste0("Ours_", unique(our_de_result_temp$cluster))
+    
+    shared_mat <- matrix("", nrow = length(unique(jardine_de_result$cluster)), ncol = length(levels(our_de_result_temp$cluster)))
+    rownames(shared_mat) <- paste0("Jardine_", unique(jardine_de_result$cluster))
+    colnames(shared_mat) <- paste0("Ours_", levels(our_de_result_temp$cluster))
+    shared_mat <- data.frame(shared_mat,
+                             stringsAsFactors = FALSE, check.names = FALSE)
+    
+    ### calculate common DE genes - Jaccard Similarity (adjuated pv < 0.05)
+    for(clstr1 in unique(jardine_de_result$cluster)) {
+      for(clstr2 in unique(our_de_result_temp$cluster)) {
+        jardine_target_genes <- jardine_de_result$gene[intersect(which(jardine_de_result$p_val_adj < 0.05),
+                                                                 which(jardine_de_result$cluster == clstr1))]
+        jardine_target_genes <- convertHumanGeneList(jardine_target_genes)
+        our_target_genes <- our_de_result_temp$gene[intersect(which(our_de_result_temp$p_val_adj < 0.05),
+                                                               which(our_de_result_temp$cluster == clstr2))]
+        
+        similarity_mat_temp[paste0("Jardine_", clstr1),paste0("Ours_", clstr2)] <- length(intersect(jardine_target_genes,
+                                                                                                    our_target_genes)) / length(union(jardine_target_genes,
+                                                                                                                                      our_target_genes))
+        
+        shared_mat[paste0("Jardine_", clstr1),paste0("Ours_", clstr2)] <- paste(intersect(jardine_target_genes, our_target_genes), collapse = ",")
+      }
+    }
+    
+    ### write out the sim mat
+    write.xlsx2(data.frame(Cluster=rownames(similarity_mat_temp),
+                           similarity_mat_temp,
+                           stringsAsFactors = FALSE, check.names = FALSE),
+                file = paste0(outputDir2, "Cluster_DE_Gene_Comparison_", tp, "_JS.xlsx"),
+                sheetName = paste0("Cluster_DE_Gene_Comparison_", tp),
+                row.names = FALSE)
+    
+    write.xlsx2(data.frame(Cluster=rownames(shared_mat),
+                           shared_mat,
+                           stringsAsFactors = FALSE, check.names = FALSE),
+                file = paste0(outputDir, "Shared_DE_Genes_Between_Jardine_And_Ours_", tp, ".xlsx"),
+                sheetName = paste0("Shared_DE_Genes"),
+                row.names = FALSE)
+    
+    ### now let's see the common GO terms
+    Our_Up_Go_temp <- vector("list", length = length(unique(our_de_result_temp$cluster)))
+    names(Our_Up_Go_temp) <- unique(our_de_result_temp$cluster)
+    Our_Down_Go_temp <- vector("list", length = length(unique(our_de_result_temp$cluster)))
+    names(Our_Down_Go_temp) <- unique(our_de_result_temp$cluster)
+    
+    ### Ours
+    for(clstr in unique(our_de_result_temp$cluster)) {
+      ### Up-Regulated
+      our_target_up_genes <- our_de_result_temp$gene[intersect(intersect(which(our_de_result_temp$p_val_adj < 0.05),
+                                                                          which(our_de_result_temp$avg_log2FC > 0)),
+                                                                which(our_de_result_temp$cluster == clstr))]
+      
+      ### get entrez ids for the genes
+      de_entrez_ids <- mapIds(org.Mm.eg.db,
+                              our_target_up_genes,
+                              "ENTREZID", "SYMBOL")
+      de_entrez_ids <- de_entrez_ids[!is.na(de_entrez_ids)]
+      
+      Our_Up_Go_temp[[clstr]] <- pathwayAnalysis_CP(geneList = de_entrez_ids,
+                                                org = "mouse", database = "GO",
+                                                imgPrint = FALSE)
+      
+      ### Down-Regulated
+      our_target_down_genes <- our_de_result_temp$gene[intersect(intersect(which(our_de_result_temp$p_val_adj < 0.05),
+                                                                            which(our_de_result_temp$avg_log2FC < 0)),
+                                                                  which(our_de_result_temp$cluster == clstr))]
+      
+      ### get entrez ids for the genes
+      de_entrez_ids <- mapIds(org.Mm.eg.db,
+                              our_target_down_genes,
+                              "ENTREZID", "SYMBOL")
+      de_entrez_ids <- de_entrez_ids[!is.na(de_entrez_ids)]
+      
+      Our_Down_Go_temp[[clstr]] <- pathwayAnalysis_CP(geneList = de_entrez_ids,
+                                                  org = "mouse", database = "GO",
+                                                  imgPrint = FALSE)
+    }
+    
+    
+    ### Pairwise GO term comparison
+    Up_Go_Sim_Mat_temp <- matrix(0, nrow = length(unique(jardine_de_result$cluster)), ncol = length(unique(our_de_result_temp$cluster)))
+    rownames(Up_Go_Sim_Mat_temp) <- paste0("Jardine_", unique(jardine_de_result$cluster))
+    colnames(Up_Go_Sim_Mat_temp) <- paste0("Ours_", unique(our_de_result_temp$cluster))
+    
+    Down_Go_Sim_Mat_temp <- matrix(0, nrow = length(unique(jardine_de_result$cluster)), ncol = length(unique(our_de_result_temp$cluster)))
+    rownames(Down_Go_Sim_Mat_temp) <- paste0("Jardine_", unique(jardine_de_result$cluster))
+    colnames(Down_Go_Sim_Mat_temp) <- paste0("Ours_", unique(our_de_result_temp$cluster))
+    
+    ### calculate common GO terms - Jaccard Similarity (adjuated pv < 0.05)
+    for(clstr1 in unique(jardine_de_result$cluster)) {
+      for(clstr2 in unique(our_de_result_temp$cluster)) {
+        jardine_target_up_go <- Jardine_Up_Go[[clstr1]]$ID[which(Jardine_Up_Go[[clstr1]]$p.adjust < 0.05)]
+        jardine_target_down_go <- Jardine_Down_Go[[clstr1]]$ID[which(Jardine_Down_Go[[clstr1]]$p.adjust < 0.05)]
+        our_target_up_go <- Our_Up_Go_temp[[clstr2]]$ID[which(Our_Up_Go_temp[[clstr2]]$p.adjust < 0.05)]
+        our_target_down_go <- Our_Down_Go_temp[[clstr2]]$ID[which(Our_Down_Go_temp[[clstr2]]$p.adjust < 0.05)]
+        
+        Up_Go_Sim_Mat_temp[paste0("Jardine_", clstr1),paste0("Ours_", clstr2)] <- length(intersect(jardine_target_up_go,
+                                                                                               our_target_up_go)) / length(union(jardine_target_up_go,
+                                                                                                                                 our_target_up_go))
+        Down_Go_Sim_Mat_temp[paste0("Jardine_", clstr1),paste0("Ours_", clstr2)] <- length(intersect(jardine_target_down_go,
+                                                                                                 our_target_down_go)) / length(union(jardine_target_down_go,
+                                                                                                                                     our_target_down_go))
+      }
+    }
+    
+    ### write out the sim matrix
+    write.xlsx2(data.frame(Cluster=rownames(Up_Go_Sim_Mat_temp),
+                           Up_Go_Sim_Mat_temp,
+                           stringsAsFactors = FALSE, check.names = FALSE),
+                file = paste0(outputDir2, "Cluster_Up_GO_Term_Comparison_", tp, "_JS.xlsx"),
+                sheetName = paste0("Cluster_Up_GO_Term_Comparison_", tp),
+                row.names = FALSE)
+    write.xlsx2(data.frame(Cluster=rownames(Down_Go_Sim_Mat_temp),
+                           Down_Go_Sim_Mat_temp,
+                           stringsAsFactors = FALSE, check.names = FALSE),
+                file = paste0(outputDir2, "Cluster_Down_GO_Term_Comparison_", tp, "_JS.xlsx"),
+                sheetName = paste0("Cluster_Down_GO_Term_Comparison_", tp),
+                row.names = FALSE)
+    
+  }
+  
+  
+  
+  
   
   
   
