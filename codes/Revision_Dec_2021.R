@@ -187,15 +187,32 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
   ### 3. batch effect
   ### Library, Time, Info, Tissue, Development, Cell_Type, HSPC
   
+  ### put similar annotations into one
+  Updated_Seurat_Obj$Annotation2 <- Updated_Seurat_Obj$Annotation
+  Updated_Seurat_Obj$Annotation2[grep("MyP", Updated_Seurat_Obj$Annotation2)] <- "MyP"
+  Updated_Seurat_Obj$Annotation2[grep("Bcell", Updated_Seurat_Obj$Annotation2)] <- "BCell"
+  Updated_Seurat_Obj$Annotation2[grep("BCell", Updated_Seurat_Obj$Annotation2)] <- "BCell"
+  Updated_Seurat_Obj$Annotation2[grep("Mono", Updated_Seurat_Obj$Annotation2)] <- "Mono"
+  Updated_Seurat_Obj$Annotation2[grep("Mast", Updated_Seurat_Obj$Annotation2)] <- "Mast"
+  Updated_Seurat_Obj$Annotation2[grep("Pre/Pro-B", Updated_Seurat_Obj$Annotation2)] <- "Pre/Pro-B"
+  Updated_Seurat_Obj$Annotation2[grep("TCell", Updated_Seurat_Obj$Annotation2)] <- "TCell"
+  Updated_Seurat_Obj$Annotation2[grep("Prog", Updated_Seurat_Obj$Annotation2)] <- "Prog"
+  Updated_Seurat_Obj$Annotation2[grep("C-", Updated_Seurat_Obj$Annotation2)] <- "C"
+  Updated_Seurat_Obj$Annotation2[grep("F-", Updated_Seurat_Obj$Annotation2)] <- "F"
+  Updated_Seurat_Obj$Annotation2[grep("P-", Updated_Seurat_Obj$Annotation2)] <- "P"
+  Updated_Seurat_Obj$Annotation2[grep("C/F-", Updated_Seurat_Obj$Annotation2)] <- "C/F"
+  Updated_Seurat_Obj$Annotation2[grep("UD", Updated_Seurat_Obj$Annotation2)] <- "UD"
+  
   ### variables
-  vars <- c("Library", "Time", "Info", "Tissue", "Development", "Cell_Type", "HSPC", "Annotation")
+  vars <- c("Library", "Time", "Info", "Tissue", "Development", "Cell_Type", "HSPC", "Annotation", "Annotation2")
   
   ### for each var, make a umap
+  options(ggrepel.max.overlaps = Inf)
   for(var in vars) {
     p <- DimPlot(object = Updated_Seurat_Obj, reduction = "umap", raster = TRUE,
                  group.by = var,
                  pt.size = 1) +
-      ggtitle(paste0("UMAP - ", var)) +
+      ggtitle("") +
       labs(color = var) +
       guides(colour = guide_legend(override.aes = list(size=10))) +
       theme_classic(base_size = 48) +
@@ -205,7 +222,8 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
             legend.title = element_text(size = 24, color = "black", face = "bold"),
             legend.text = element_text(size = 24, color = "black", face = "bold"),
             axis.ticks = element_blank())
-    ggsave(paste0(outputDir, "UMAP_plot_", var, "_.png"), plot = p, width = 20, height = 10, dpi = 350)
+    # p <- LabelClusters(p, id = var, color = "black", size = 10, repel = T,  box.padding = 1)
+    ggsave(paste0(outputDir, "UMAP_plot_", var, ".png"), plot = p, width = 20, height = 10, dpi = 350)
     
     p <- DimPlot(object = Updated_Seurat_Obj, reduction = "pca", raster = TRUE,
                  group.by = var,
@@ -220,13 +238,8 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
             legend.title = element_text(size = 24, color = "black", face = "bold"),
             legend.text = element_text(size = 24, color = "black", face = "bold"),
             axis.ticks = element_blank())
-    ggsave(paste0(outputDir, "PCA_plot_", var, "_.png"), plot = p, width = 20, height = 10, dpi = 350)
+    ggsave(paste0(outputDir, "PCA_plot_", var, ".png"), plot = p, width = 20, height = 10, dpi = 350)
   }
-  
-  ### new UMAP with new combined annotation - there are too many same cell type clusters
-  Updated_Seurat_Obj$Combined_Annotation <- Updated_Seurat_Obj$Annotation
-  
-  
   
   
   ### UMI distribution - density plot
@@ -243,7 +256,22 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
           legend.position = "right",
           legend.title = element_text(size = 30),
           legend.text = element_text(size = 24))
-  ggsave(file = paste0(outputDir, "Density_UMI_Count_Distribution.png"), plot = p, width = 20, height = 10, dpi = 350)
+  ggsave(file = paste0(outputDir, "Density_UMI_Count_Distribution_Mean.png"), plot = p, width = 20, height = 10, dpi = 350)
+  
+  ### UMI distribution - density plot (not averaging but just use all the values)
+  temp <- as.vector(Updated_Seurat_Obj@assays$RNA@counts)
+  temp <- data.frame(UMI_Counts=temp,
+                     stringsAsFactors = FALSE, check.names = FALSE)
+  
+  p <- ggplot(temp, aes(x=UMI_Counts)) +
+    geom_density(size=3, col = "blue") +
+    ylab("Density") +
+    theme_classic(base_size = 40) +
+    theme(legend.key.size = unit(1, 'cm'),
+          legend.position = "right",
+          legend.title = element_text(size = 30),
+          legend.text = element_text(size = 24))
+  ggsave(file = paste0(outputDir, "Density_UMI_Count_Distribution_All.png"), plot = p, width = 20, height = 10, dpi = 350)
   
   ### Mean UMI count table
   umi_count_mat <- matrix(0, 2, 5)
@@ -3751,6 +3779,85 @@ trent_revision <- function(inputDataPath="./data/Combined_Seurat_Obj.RDS",
                 file = paste0(outputDir2, "Cluster_Down_GO_Term_Comparison_", tp, "_JS.xlsx"),
                 sheetName = paste0("Cluster_Down_GO_Term_Comparison_", tp),
                 row.names = FALSE)
+    
+  }
+  
+  
+  ### anchor combine each time point to Jardine
+  ### needs [subset_our_obj7] and [subset_jardine_obj_mouse]
+  temp.combined <- vector("list", length(unique(subset_our_obj7$Tissue)))
+  names(temp.combined) <- unique(subset_our_obj7$Tissue)
+  for(cell_type in unique(subset_our_obj7$Tissue)) {
+    
+    ### subset
+    our_temp_obj <- subset(subset_our_obj7,
+                           cells = rownames(subset_our_obj7@meta.data)[which(subset_our_obj7$Tissue == cell_type)])
+    if(grepl(pattern = "Heme", cell_type)) {
+      jardine_temp_obj <- subset(subset_jardine_obj_mouse,
+                                 cells = rownames(subset_jardine_obj_mouse@meta.data)[which(subset_jardine_obj_mouse$broad_fig1_cell.labels == "HSC/MPP and pro")])
+    } else if(grepl(pattern = "Stroma", cell_type)) {
+      jardine_temp_obj <- subset(subset_jardine_obj_mouse,
+                                 cells = rownames(subset_jardine_obj_mouse@meta.data)[which(subset_jardine_obj_mouse$broad_fig1_cell.labels == "stroma")])
+    } else {
+      writeLines(paste("ERROR"))
+    }
+    
+    ### select features that are repeatedly variable across datasets for integration
+    features <- SelectIntegrationFeatures(object.list = list(our_temp_obj, jardine_temp_obj))
+    
+    ### find anchors between the two objects
+    temp.anchors <- FindIntegrationAnchors(object.list = list(our_temp_obj, jardine_temp_obj), anchor.features = features)
+    
+    ### combined object
+    temp.combined[[cell_type]] <- IntegrateData(anchorset = temp.anchors)
+    
+    ### set the default assay
+    DefaultAssay(temp.combined[[cell_type]]) <- "integrated"
+    
+    ### preprocess the combined data
+    temp.combined[[cell_type]] <- FindVariableFeatures(temp.combined[[cell_type]])
+    temp.combined[[cell_type]] <- ScaleData(temp.combined[[cell_type]], verbose = FALSE)
+    temp.combined[[cell_type]] <- RunPCA(temp.combined[[cell_type]], npcs = 20, verbose = FALSE)
+    temp.combined[[cell_type]] <- RunUMAP(temp.combined[[cell_type]], reduction = "pca", dims = 1:20)
+    
+    ### do a new clustering
+    temp.combined[[cell_type]]$original_seurat_clusters <- temp.combined[[cell_type]]$seurat_clusters
+    
+    temp.combined[[cell_type]] <- FindNeighbors(temp.combined[[cell_type]], dims = 1:20)
+    temp.combined[[cell_type]] <- FindClusters(temp.combined[[cell_type]], resolution = 0.4)
+    
+    ### cell annotation
+    temp.combined[[cell_type]]$Combined_Anno <- temp.combined[[cell_type]]$New_Anno
+    temp.combined[[cell_type]]$Combined_Anno[which(!is.na(temp.combined[[cell_type]]$New_Anno))] <- paste0("Our_", temp.combined[[cell_type]]$Combined_Anno[which(!is.na(temp.combined[[cell_type]]$New_Anno))])
+    temp.combined[[cell_type]]$Combined_Anno[which(is.na(temp.combined[[cell_type]]$New_Anno))] <- temp.combined[[cell_type]]$broad_fig1_cell.labels[which(is.na(temp.combined[[cell_type]]$New_Anno))]
+    temp.combined[[cell_type]]$Combined_Anno[which(temp.combined[[cell_type]]$Combined_Anno == "HSC/MPP and pro")] <- "JARDINE_HSPC"
+    temp.combined[[cell_type]]$Combined_Anno[which(temp.combined[[cell_type]]$Combined_Anno == "stroma")] <- "JARDINE_Stroma"
+    
+    ### UMAP
+    p <- DimPlot(object = temp.combined[[cell_type]], reduction = "umap", raster = TRUE,
+                 group.by = "Combined_Anno",
+                 pt.size = 1) +
+      ggtitle(paste0(cell_type)) +
+      labs(color = "Annotation") +
+      guides(colour = guide_legend(override.aes = list(size=10))) +
+      theme_classic(base_size = 48) +
+      theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 36, color = "black", face = "bold"),
+            axis.title = element_text(size = 36, color = "black", face = "bold"),
+            axis.text = element_text(size = 36, color = "black", face = "bold"),
+            legend.title = element_text(size = 24, color = "black", face = "bold"),
+            legend.text = element_text(size = 24, color = "black", face = "bold"),
+            axis.ticks = element_blank())
+    ggsave(paste0(outputDir, "UMAP_Anchor_Combined_", cell_type, ".png"), plot = p, width = 20, height = 10, dpi = 350)
+    
+    ### write meta.data in Excel for each object
+    col_names <- c("Library", "LibShort", "Type", "Time", "Tissue", "Development", "Cell_Type", "Annotation",
+                   "HSPC", "Dev_Anno", "New_HSPC", "New_Anno", "original_seurat_clusters", "cell.labels",
+                   "broad_fig1_cell.labels", "Combined_Anno", "seurat_clusters")
+    write.xlsx(temp.combined[[cell_type]]@meta.data[,col_names],
+               file = paste0(outputDir, "Meta.data_Combined_", cell_type, ".xlsx"),
+               sheetName = paste0(cell_type))
+    
+    gc()
     
   }
   
