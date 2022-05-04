@@ -38,7 +38,7 @@ for(sp in names(metric_info)) {
     colnames(metric_info2)[ncol(metric_info2)] <- sp
   }
 }
-as.numeric(gsub(",", "", y))
+
 ### draw bar graphs with some features
 plot_df <- data.frame(Sample=colnames(metric_info2),
                       Number_of_Reads=as.numeric(gsub(",", "", metric_info2["Number of Reads",])),
